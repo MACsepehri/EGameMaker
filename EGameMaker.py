@@ -6,6 +6,9 @@
 ### ---------------------------------------------
 
 import tkinter as tk
+from Assets.GUI.Render.RenderGUIComponent import RenderGUIComponent
+
+
 
 
 
@@ -45,4 +48,9 @@ class EGameMaker(tk.Tk):
         self.mainloop()
 
 app = EGameMaker()
+
+### using assets
+render_gui = RenderGUIComponent(_app=app)
+render_gui.renderText('MainPage',[('01',30)])
+
 app.run()
