@@ -53,7 +53,7 @@ class EGameMaker(tk.Tk):
         self.resizable(False, False)
 
     def run(self):
-        render_gui.renderText(state,[('01',30)])
+        render_gui.render('MainPage',[('01',30)])
         self.maximize()
         self.mainloop()
 
