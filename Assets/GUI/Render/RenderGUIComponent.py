@@ -2,9 +2,11 @@
 ### GUI objects easier
 
 
+
 import os
 import tkinter as tk
 import tkinter.font as tkfont
+import pickle
 
 
 class RenderGUIComponent:
@@ -13,7 +15,9 @@ class RenderGUIComponent:
         self._app = _app
         self.font = None
         self.fonts = {}
+        self.buttons = {}
         self.base_dir = base_dir
+        self.action_base_dir = 'Assets/Action'
 
         self.load_components()
 
@@ -38,9 +42,12 @@ class RenderGUIComponent:
         if self._app is None:
             raise RuntimeError('Initialize the application first.')
 
-        self.font = tkfont.nametofont('TkDefaultFont', root=self._app)
+        self.font = tkfont.nametofont(
+            'TkDefaultFont',
+            root=self._app
+        )
 
-    def render(self, component_file, text_font):
+    def render(self, component_file, text_font=None):
         self.renderText(component_file, text_font)
         self.renderButton(component_file)
 
@@ -69,9 +76,14 @@ class RenderGUIComponent:
                 text, pos, text_id = self.parse_text(content)
 
                 font_size = font_sizes.get(text_id, 14)
+
                 component_font = tkfont.Font(
                     root=self._app,
-                    family=self.font.actual('family') if self.font else 'TkDefaultFont',
+                    family=(
+                        self.font.actual('family')
+                        if self.font
+                        else 'TkDefaultFont'
+                    ),
                     size=font_size
                 )
 
@@ -89,9 +101,9 @@ class RenderGUIComponent:
                 self.fonts[text_id] = component_font
 
             except (ValueError, IndexError, tk.TclError) as error:
-                print(f'Unable to render GUI component: {error}')
+                # print(f'Unable to render GUI component: {error}')
+                print(f'Unable to render GUI component: {error} | Content: {content!r}')
 
-    
     def renderButton(self, component_file):
         if self._app is None:
             raise RuntimeError('Application has not been initialized.')
@@ -106,29 +118,46 @@ class RenderGUIComponent:
                 continue
 
             try:
-                content = content.strip()
-
-                if not content.startswith('BUTTON=(') or not content.endswith(')'):
-                    raise ValueError('Invalid Button component format.')
-
-                content = content[8:-1]
-                text, remaining = content.split(',(', 1)
-                position, button_id = remaining.split('),', 1)
-                x, y = position.split(',', 1)
+                text, pos, button_id, action_path = self.parse_button(content)
 
                 button = tk.Button(
                     self._app,
-                    text=text
+                    text=text,
+                    command=lambda path=action_path: self.execute_action(path)
                 )
 
                 button.place(
-                    relx=float(x),
-                    rely=float(y)
+                    relx=float(pos[0]),
+                    rely=float(pos[1])
                 )
 
-            except (ValueError, IndexError, tk.TclError) as error:
-                print(f'Unable to render GUI component: {error}')
+                self.buttons[button_id] = button
 
+            except (ValueError, IndexError, tk.TclError) as error:
+                # print(f'Unable to render GUI component: {error}')
+                print(f'Unable to render GUI component: {error} | Content: {content!r}')
+
+    def execute_action(self, action_path):
+        base_path = os.path.abspath(self.action_base_dir)
+        full_path = os.path.abspath(
+            os.path.join(base_path, action_path)
+        )
+
+        if os.path.commonpath([base_path, full_path]) != base_path:
+            raise ValueError('Invalid action path.')
+
+        if not os.path.isfile(full_path):
+            raise FileNotFoundError(
+                f'Action file not found: {full_path}'
+            )
+
+        with open(full_path, 'rb') as file:
+            action = pickle.load(file)
+
+        if not callable(action):
+            raise TypeError('The loaded action is not callable.')
+
+        action(self._app)
 
     def parse_text(self, content):
         content = content.strip()
@@ -136,12 +165,36 @@ class RenderGUIComponent:
         if not content.startswith('TEXT=(') or not content.endswith(')'):
             raise ValueError('Invalid TEXT component format.')
 
-        content = content[6:-1]
+        content = content[len('TEXT=('):-1]
         text, remaining = content.split(',(', 1)
         position, text_id = remaining.split('),', 1)
         x, y = position.split(',', 1)
 
         return text, (x, y), text_id
+
+
+    def parse_button(self, content):
+        content = content.strip()
+
+        if not content.startswith('BUTTON=(') or not content.endswith(')'):
+            raise ValueError(f'Invalid BUTTON component format: {content!r}')
+
+        content = content[8:-1]
+        text, remaining = content.split(',(', 1)
+        position, remaining = remaining.split('),', 1)
+        x, y = position.split(',', 1)
+
+        parts = remaining.split(',', 1)
+
+        if len(parts) != 2:
+            raise ValueError(
+                f'BUTTON requires an ID and action path: {content!r}'
+            )
+
+        button_id, action_path = parts
+
+        return text, (x, y), button_id, action_path
+
 
     def addTextComponent(self, component_file, text='', pos=(0, 0), id=''):
         filename = (
@@ -190,8 +243,14 @@ class RenderGUIComponent:
 
         self.content[filename[:-4]] = updated_lines
 
-
-    def addButtonComponent(self, component_file, text='', pos=(0, 0), id=''):
+    def addButtonComponent(
+        self,
+        component_file,
+        text='',
+        pos=(0, 0),
+        id='',
+        action_path=''
+    ):
         filename = (
             component_file
             if component_file.endswith('.GUI')
@@ -203,20 +262,20 @@ class RenderGUIComponent:
         if not os.path.isfile(path):
             raise FileNotFoundError(f'GUI file not found: {path}')
 
+        new_component = (
+            f'BUTTON=({text},({pos[0]},{pos[1]}),{id},{action_path})\n'
+        )
+
         with open(path, 'r', encoding='utf-8') as file:
             lines = file.readlines()
-
-        new_component = f'BUTTON=({text},({pos[0]},{pos[1]}),{id})\n'
 
         updated_lines = []
         replaced = False
 
         for line in lines:
-            if line.startswith('BUTTON=(') and line.rstrip().endswith(')'):
+            if line.startswith('BUTTON='):
                 try:
-                    content = line.strip()[8:-1]
-                    _, remaining = content.split(',(', 1)
-                    _, existing_id = remaining.split('),', 1)
+                    _, _, existing_id, _ = self.parse_button(line)
 
                     if existing_id == str(id):
                         if not replaced:
@@ -239,4 +298,3 @@ class RenderGUIComponent:
             file.writelines(updated_lines)
 
         self.content[filename[:-4]] = updated_lines
-
