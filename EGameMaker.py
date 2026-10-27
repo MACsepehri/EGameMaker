@@ -175,7 +175,50 @@ def save_project(inp):
 
     ### Saving basics
     with open(projectPath+f'/{projectName}.py', 'w') as file:
-        file.write('print("hello world")')
+        file.write(f'''
+### MADE BY EGameMaker GAME ENGINE
+### OPEN-SOURCE ENGINE
+
+import pygame,sys
+import {projectName}Assets.Global as Global
+
+pygame.init()
+
+def initialization():
+    if (Global.FULLSCREEN):
+        win = pygame.display.set_mode((0,0),pygame.FULLSCREEN)
+    else:
+        win = pygame.display.set_mode(Global.BASE_WINDOW_SIZE)
+    pygame.display.set_caption(Global.WINDOW_TITLE)
+    return win
+
+def app():
+    win = initialization()
+    clock = pygame.time.Clock()
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                sys.exit(0)
+
+        win.fill(Global.BACKGROUND_COLOR)
+        pygame.display.update()
+        clock.tick(Global.FPS)
+
+if __name__ == "__main__":
+    app()
+
+''')
+
+    with open(projectPath+f'/{projectName}Assets/Global.py', 'w') as globalFile:
+        globalFile.write(f'''
+### MADE BY EGameMaker GAME ENGINE
+### OPEN-SOURCE ENGINE
+
+FULLSCREEN = True
+BASE_WINDOW_SIZE = (500,500)
+FPS = 60
+BACKGROUND_COLOR = (255,255,255)
+WINDOW_TITLE = "{projectName}"''')
 
 
 app = EGameMaker()
