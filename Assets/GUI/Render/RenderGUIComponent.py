@@ -16,6 +16,7 @@ class RenderGUIComponent:
         self.font = None
         self.fonts = {}
         self.buttons = {}
+        self.entries = {}
         self.base_dir = base_dir
         self.action_base_dir = 'Assets/Action'
 
@@ -50,6 +51,7 @@ class RenderGUIComponent:
     def render(self, component_file, text_font=None):
         self.renderText(component_file, text_font)
         self.renderButton(component_file)
+        self.renderInput(component_file)
 
     def renderText(self, component_file='', font=None):
         if self._app is None:
@@ -137,6 +139,47 @@ class RenderGUIComponent:
                 # print(f'Unable to render GUI component: {error}')
                 print(f'Unable to render GUI component: {error} | Content: {content!r}')
 
+    def renderInput(self, component_file):
+        if self._app is None:
+            raise RuntimeError('Application has not been initialized.')
+
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        self.entries.clear()
+
+        for content in self.content[component_file]:
+            if not content.startswith('INPUT='):
+                continue
+
+            try:
+                pos, input_id = self.parse_input(content)
+
+                entry = tk.Entry(self._app)
+
+                entry.place(
+                    relx=float(pos[0]),
+                    rely=float(pos[1])
+                )
+
+                self.entries[input_id] = entry
+
+            except (ValueError, IndexError, tk.TclError) as error:
+                print(f'Unable to render GUI component: {error} | Content: {content!r}')
+
+    def getInputValue(self, input_id):
+        entry = self.entries.get(str(input_id))
+
+        if entry is None:
+            raise KeyError(f'Input component not found: {input_id}')
+
+        if not entry.winfo_exists():
+            raise RuntimeError(f'Input component has been destroyed: {input_id}')
+
+        return entry.get()
+
     def execute_action(self, action_path):
         base_path = os.path.abspath(self.action_base_dir)
         full_path = os.path.abspath(
@@ -194,6 +237,22 @@ class RenderGUIComponent:
         button_id, action_path = parts
 
         return text, (x, y), button_id, action_path
+
+    def parse_input(self, content):
+        content = content.strip()
+
+        if not content.startswith('INPUT=(') or not content.endswith(')'):
+            raise ValueError(f'Invalid INPUT component format: {content!r}')
+
+        content = content[len('INPUT=('):-1]
+        position, input_id = content.rsplit(',', 1)
+
+        if not (position.startswith('(') and position.endswith(')')):
+            raise ValueError(f'Invalid INPUT position format: {position!r}')
+
+        x, y = position[1:-1].split(',', 1)
+
+        return (x, y), input_id
 
 
     def addTextComponent(self, component_file, text='', pos=(0, 0), id=''):
@@ -298,3 +357,77 @@ class RenderGUIComponent:
             file.writelines(updated_lines)
 
         self.content[filename[:-4]] = updated_lines
+
+    def addInputComponent(
+        self,
+        component_file,
+        pos=(0, 0),
+        id=''
+    ):
+        filename = (
+            component_file
+            if component_file.endswith('.GUI')
+            else component_file + '.GUI'
+        )
+
+        path = os.path.join(self.base_dir, filename)
+
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f'GUI file not found: {path}')
+
+        new_component = (
+            f'INPUT=(({pos[0]},{pos[1]}),{id})\n'
+        )
+
+        with open(path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+
+        updated_lines = []
+        replaced = False
+
+        for line in lines:
+            if line.startswith('INPUT='):
+                try:
+                    _, existing_id = self.parse_input(line)
+
+                    if existing_id == str(id):
+                        if not replaced:
+                            updated_lines.append(new_component)
+                            replaced = True
+                        continue
+
+                except (ValueError, IndexError):
+                    pass
+
+            updated_lines.append(line)
+
+        if not replaced:
+            if updated_lines and not updated_lines[-1].endswith('\n'):
+                updated_lines[-1] += '\n'
+
+            updated_lines.append(new_component)
+
+        with open(path, 'w', encoding='utf-8') as file:
+            file.writelines(updated_lines)
+
+        self.content[filename[:-4]] = updated_lines
+
+    def getInput(
+        self,
+        component_file,
+        input_id
+    ):
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        entry = self.entries.get(str(input_id))
+
+        if entry is None:
+            raise KeyError(f'Input component not found: {input_id}')
+
+        if not entry.winfo_exists():
+            raise RuntimeError(f'Input component has been destroyed: {input_id}')
+
+        return entry

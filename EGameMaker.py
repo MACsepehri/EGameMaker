@@ -9,6 +9,7 @@
 import os
 import pickle
 import tkinter as tk
+from tkinter import messagebox as tk_alert
 from Assets.GUI.Render.RenderGUIComponent import RenderGUIComponent
 
 
@@ -28,6 +29,7 @@ class EGameMaker(tk.Tk):
         render_gui.init_app(self)
         render_gui.init_font()
         self.create_new_project()
+        self.create_project_action()
 
         projects = os.listdir('Projects')
         if len(projects) < 1:
@@ -60,14 +62,22 @@ class EGameMaker(tk.Tk):
 
         os.makedirs(os.path.dirname(path), exist_ok=True)
 
-        if not os.path.exists(path) or os.path.getsize(path) == 0:
-            with open(path, 'wb') as file:
-                pickle.dump(create_project, file)
+        with open(path, 'wb') as file:
+            pickle.dump(create_project, file)
 
         with open(path, 'rb') as file:
             func = pickle.load(file)
 
         func(self)
+
+    def create_project_action(self):
+        # add pkl object func to create new project
+        path = 'Assets/Action/NewProject/03.pkl'
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        with open(path, 'wb') as file:
+            pickle.dump(save_project_action, file)
 
     def change_page(self, new_state, text_font=None):
         for component in self.components:
@@ -82,14 +92,55 @@ class EGameMaker(tk.Tk):
         self.components = self.winfo_children()
 
     def run(self):
-        render_gui.render('MainPage', [('01', 30)])
-        self.components = self.winfo_children()
+        self.change_page('MainPage', [('01', 30)])
         self.maximize()
         self.mainloop()
 
 
 def create_project(app):
     app.change_page('NewProject')
+
+def save_project_action(app):
+    entry = render_gui.getInput('NewProject', '02')
+    name = entry.get()
+    already_existed = (
+        bool(name.strip()) and os.path.isdir(os.path.join('Projects', name))
+    )
+
+    save_project(entry)
+
+    if (
+        name.strip()
+        and not already_existed
+        and os.path.isdir(os.path.join('Projects', name))
+    ):
+        app.change_page('InProject', [('01', 30)])
+
+def save_project(inp):
+    ### IMPORTANT : DON'T CHANGE THIS FUNCTION!
+    ###  - IN THIS FUNCTION BASE OF GAME WILL CREATE
+
+    projectName = inp.get()
+    if projectName.strip() == '':
+        tk_alert.showerror('Error','Invalid project name.')
+        return
+    else:
+        for listdir in os.listdir('Projects'):
+            if listdir.lower().strip() == projectName.lower().strip():
+                tk_alert.showerror('Error','This project is already exist.')
+                return
+    
+    projectPath = f'Projects/{projectName}'
+
+
+    ### Creating project structure
+    os.mkdir(projectPath)
+    os.mkdir(projectPath+f'/{projectName}Assets')
+    
+
+    ### Saving basics
+    with open(projectPath+f'/{projectName}.py', 'w') as file:
+        file.write('print("hello world")')
 
 
 app = EGameMaker()
