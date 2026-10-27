@@ -209,16 +209,31 @@ if __name__ == "__main__":
 
 ''')
 
+    with open(projectPath+f'/{projectName}Assets/Global.json', 'w') as globalFile:
+            globalFile.write('''
+{
+    "fullscreen":false,
+    "base.window.size":[500,500],
+    "fps":60,
+    "title":"'''+projectName+'''",
+    "background":[255,255,255]
+}''')
+
     with open(projectPath+f'/{projectName}Assets/Global.py', 'w') as globalFile:
         globalFile.write(f'''
 ### MADE BY EGameMaker GAME ENGINE
 ### OPEN-SOURCE ENGINE
 
-FULLSCREEN = True
-BASE_WINDOW_SIZE = (500,500)
-FPS = 60
-BACKGROUND_COLOR = (255,255,255)
-WINDOW_TITLE = "{projectName}"''')
+import json
+
+with open("{projectName}Assets/Global.json","r") as file:
+    content = json.load(file)
+
+FULLSCREEN = content["fullscreen"]
+BASE_WINDOW_SIZE = (content["base.window.size"][0],content["base.window.size"][1])
+FPS = content["fps"]
+BACKGROUND_COLOR = (content["background"][0],content["background"][1],content["background"][2])
+WINDOW_TITLE = content["title"]''')
 
 
 app = EGameMaker()
