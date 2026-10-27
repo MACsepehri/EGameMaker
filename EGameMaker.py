@@ -34,6 +34,8 @@ class EGameMaker(tk.Tk):
         projects = os.listdir('Projects')
         if len(projects) < 1:
             render_gui.addTextComponent('MainPage.GUI', "You don't have any projects...", ('0.02', '0.15'), '02')
+        else:
+            self.show_projects(projects)
 
     def maximize(self):
         try:
@@ -79,6 +81,30 @@ class EGameMaker(tk.Tk):
         with open(path, 'wb') as file:
             pickle.dump(save_project_action, file)
 
+    def show_projects(self, projects):
+        # user has projects -> remove the "no projects" text and list them
+        render_gui.removeTextComponent('MainPage.GUI', '02')
+
+        for index, name in enumerate(projects):
+            if not os.path.isdir(os.path.join('Projects', name)):
+                continue
+
+            action_path = f'MainPage/{name}.pkl'
+            full_path = os.path.join('Assets/Action', action_path)
+
+            os.makedirs(os.path.dirname(full_path), exist_ok=True)
+
+            with open(full_path, 'wb') as file:
+                pickle.dump(OpenProjectAction(name), file)
+
+            render_gui.addButtonComponent(
+                'MainPage.GUI',
+                text=name,
+                pos=('0.02', f'{0.35 + index * 0.07:.2f}'),
+                id=name,
+                action_path=action_path,
+            )
+
     def change_page(self, new_state, text_font=None):
         for component in self.components:
             if component.winfo_exists():
@@ -99,6 +125,15 @@ class EGameMaker(tk.Tk):
 
 def create_project(app):
     app.change_page('NewProject')
+
+
+class OpenProjectAction:
+    def __init__(self, project_name):
+        self.project_name = project_name
+
+    def __call__(self, app):
+        app.change_page('InProject', [('01', 30)])
+
 
 def save_project_action(app):
     entry = render_gui.getInput('NewProject', '02')

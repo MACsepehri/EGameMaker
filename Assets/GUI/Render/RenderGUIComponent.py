@@ -302,6 +302,41 @@ class RenderGUIComponent:
 
         self.content[filename[:-4]] = updated_lines
 
+    def removeTextComponent(self, component_file, id=''):
+        filename = (
+            component_file
+            if component_file.endswith('.GUI')
+            else component_file + '.GUI'
+        )
+
+        path = os.path.join(self.base_dir, filename)
+
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f'GUI file not found: {path}')
+
+        with open(path, 'r', encoding='utf-8') as file:
+            lines = file.readlines()
+
+        updated_lines = []
+
+        for line in lines:
+            if line.startswith('TEXT='):
+                try:
+                    _, _, existing_id = self.parse_text(line)
+
+                    if existing_id == str(id):
+                        continue
+
+                except (ValueError, IndexError):
+                    pass
+
+            updated_lines.append(line)
+
+        with open(path, 'w', encoding='utf-8') as file:
+            file.writelines(updated_lines)
+
+        self.content[filename[:-4]] = updated_lines
+
     def addButtonComponent(
         self,
         component_file,
