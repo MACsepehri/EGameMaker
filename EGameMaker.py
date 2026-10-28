@@ -132,6 +132,12 @@ class OpenProjectAction:
         self.project_name = project_name
 
     def __call__(self, app):
+        render_gui.addTextComponent(
+            'InProject.GUI',
+            text=self.project_name,
+            pos=('0.02', '0.08'),
+            id='01',
+        )
         app.change_page('InProject', [('01', 30)])
 
 
@@ -149,11 +155,19 @@ def save_project_action(app):
         and not already_existed
         and os.path.isdir(os.path.join('Projects', name))
     ):
+        render_gui.addTextComponent(
+            'InProject.GUI',
+            text=name.strip(),
+            pos=('0.02', '0.08'),
+            id='01',
+        )
         app.change_page('InProject', [('01', 30)])
 
 def save_project(inp):
     ### IMPORTANT : DON'T CHANGE THIS FUNCTION!
     ###  - IN THIS FUNCTION BASE OF GAME WILL CREATE
+
+    global game_name
 
     projectName = inp.get()
     if projectName.strip() == '':
@@ -167,6 +181,7 @@ def save_project(inp):
     
     projectPath = f'Projects/{projectName}'
 
+    game_name = projectName
 
     ### Creating project structure
     os.mkdir(projectPath)
@@ -178,6 +193,7 @@ def save_project(inp):
         file.write(f'''
 ### MADE BY EGameMaker GAME ENGINE
 ### OPEN-SOURCE ENGINE
+### https://github.com/MACsepehri/EGameMaker
 
 import pygame,sys
 import {projectName}Assets.Global as Global
@@ -223,6 +239,7 @@ if __name__ == "__main__":
         globalFile.write(f'''
 ### MADE BY EGameMaker GAME ENGINE
 ### OPEN-SOURCE ENGINE
+### https://github.com/MACsepehri/EGameMaker
 
 import json
 
@@ -239,6 +256,7 @@ WINDOW_TITLE = content["title"]''')
 app = EGameMaker()
 
 ### using assets
+game_name = None
 render_gui.init_app(app)
 
 app.run()
