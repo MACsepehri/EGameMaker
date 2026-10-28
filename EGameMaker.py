@@ -8,6 +8,7 @@ import sys
 import pickle
 import tkinter as tk
 import subprocess as sub
+from tkinter import simpledialog
 from tkinter import messagebox as tk_alert
 from Assets.GUI.Render.RenderGUIComponent import RenderGUIComponent
 
@@ -152,10 +153,15 @@ def create_project(app):
 
 class OpenProjectAction:
     def __init__(self, project_name):
+        global game_name
+
         self.project_name = project_name
+        self.create_directory()
+
 
     def __call__(self, app):
         app.current_project = self.project_name
+        game_name = app.current_project
         render_gui.addTextComponent(
             'InProject.GUI',
             text=self.project_name,
@@ -164,6 +170,16 @@ class OpenProjectAction:
         )
         app.move_run_button_to_bottom()
         app.change_page('InProject', [('01', 30)])
+
+    def create_directory(self):
+        path = "Assets/Action/InProject/007.pkl"
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        if not os.path.isfile(path) or os.path.getsize(path) == 0:
+            with open(path, "wb") as file:
+                pickle.dump(get_directory, file)
+            
 
 
 def run_current_project(app):
@@ -281,7 +297,7 @@ if __name__ == "__main__":
 }''')
 
     with open(projectPath+f'/{projectName}Assets/Global.py', 'w') as globalFile:
-        globalFile.write(f'''
+        globalFile.write('''
 ### MADE BY EGameMaker GAME ENGINE
 ### OPEN-SOURCE ENGINE
 ### https://github.com/MACsepehri/EGameMaker
@@ -289,6 +305,8 @@ if __name__ == "__main__":
 import json
 import os
 import pygame
+
+pygame.init()
 
 
 class GlobalConfigure:
@@ -354,7 +372,7 @@ class GlobalConfigure:
 
     def update_state(self, new_state):
         if new_state not in self.content.get("states", {}):
-            raise ValueError(f"State '{new_state}' does not exist")
+            raise ValueError("State "+new_state+" does not exist")
 
         self.state = new_state
         self.content["state"] = new_state
@@ -364,6 +382,11 @@ class GlobalConfigure:
         return self.content["state"]
 
 ''')
+
+def get_directory(app):
+    path = simpledialog.askstring("Create directory", "Enter directory path :", parent=app)
+    os.mkdir(f'Projects/{app.current_project}/{app.current_project}Assets/{path}')
+    tk_alert.showinfo('Success',f'Successfully created {path} directory in {app.current_project}Assets folder')
 
 def run_project(name):
     ### WARNING DON'T CHANGE THIS FUNCTION!

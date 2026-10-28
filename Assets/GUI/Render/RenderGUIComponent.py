@@ -7,6 +7,7 @@ import os
 import tkinter as tk
 import tkinter.font as tkfont
 import pickle
+from tkinter import simpledialog
 
 
 class RenderGUIComponent:

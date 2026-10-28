@@ -19,6 +19,9 @@ def initialization():
 def app():
     win = initialization()
     clock = pygame.time.Clock()
+
+    globalConfigure = Global.GlobalConfigure()
+
     while True:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
