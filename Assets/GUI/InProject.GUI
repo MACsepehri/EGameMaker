@@ -4,11 +4,12 @@ TEXT=(test,(0.02,0.08),01)
 # # # 
 
 BUTTON=(Add Button,(0.02,0.25),001,InProject/03.pkl)
-BUTTON=(Add Font,(0.02,0.28),001,InProject/03.pkl)
-BUTTON=(Add Text,(0.02,0.31),001,InProject/03.pkl)
-BUTTON=(Add Image,(0.02,0.34),001,InProject/03.pkl)
-BUTTON=(Window Configure,(0.02,0.37),001,InProject/03.pkl)
-BUTTON=(Game Configure,(0.02,0.4),001,InProject/03.pkl)
+BUTTON=(Add Font,(0.02,0.28),002,InProject/03.pkl)
+BUTTON=(Add Text,(0.02,0.31),003,InProject/03.pkl)
+BUTTON=(Add Image,(0.02,0.34),004,InProject/03.pkl)
+BUTTON=(Window Configure,(0.02,0.37),005,InProject/03.pkl)
+BUTTON=(Game Configure,(0.02,0.4),006,InProject/03.pkl)
+BUTTON=(Add directory,(0.02,0.43),007,InProject/03.pkl)
 
 # # # 
 
