@@ -385,8 +385,20 @@ class GlobalConfigure:
 
 def get_directory(app):
     path = simpledialog.askstring("Create directory", "Enter directory path :", parent=app)
-    os.mkdir(f'Projects/{app.current_project}/{app.current_project}Assets/{path}')
-    tk_alert.showinfo('Success',f'Successfully created {path} directory in {app.current_project}Assets folder')
+
+    if not path:
+        return
+
+    target = f'Projects/{app.current_project}/{app.current_project}Assets/{path}'
+
+    try:
+        os.mkdir(target)
+    except FileExistsError:
+        tk_alert.showerror('Error', f'{path} already exists in {app.current_project}Assets folder')
+    except OSError as error:
+        tk_alert.showerror('Error', f'Could not create {path}:\n{error}')
+    else:
+        tk_alert.showinfo('Success', f'Successfully created {path} directory in {app.current_project}Assets folder')
 
 def run_project(name):
     ### WARNING DON'T CHANGE THIS FUNCTION!
