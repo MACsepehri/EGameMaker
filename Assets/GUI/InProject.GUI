@@ -1,3 +1,15 @@
 TEXT=(Project Name :,(0.02,0.03),02)
 TEXT=(test,(0.02,0.08),01)
-BUTTON=(Run,(0.02,0.35),03,InProject/03.pkl)
+
+# # # 
+
+BUTTON=(Add Button,(0.02,0.25),001,InProject/03.pkl)
+BUTTON=(Add Font,(0.02,0.28),001,InProject/03.pkl)
+BUTTON=(Add Text,(0.02,0.31),001,InProject/03.pkl)
+BUTTON=(Add Image,(0.02,0.34),001,InProject/03.pkl)
+BUTTON=(Window Configure,(0.02,0.37),001,InProject/03.pkl)
+BUTTON=(Game Configure,(0.02,0.4),001,InProject/03.pkl)
+
+# # # 
+
+BUTTON=(Run,(0.02,0.9000),03,InProject/03.pkl)

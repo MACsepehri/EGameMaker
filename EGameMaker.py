@@ -91,6 +91,19 @@ class EGameMaker(tk.Tk):
         with open(path, 'wb') as file:
             pickle.dump(run_current_project, file)
 
+    def move_run_button_to_bottom(self):
+        # pin the InProject "Run" button near the bottom edge.
+        # the .GUI renderer places by rely (0..1 fraction of window height),
+        # so "window height - 0.1" == 0.9
+        y_rel = 1.0 - 0.1
+        render_gui.addButtonComponent(
+            'InProject.GUI',
+            text='Run',
+            pos=('0.02', f'{y_rel:.4f}'),
+            id='03',
+            action_path='InProject/03.pkl',
+        )
+
     def show_projects(self, projects):
         # user has projects -> remove the "no projects" text and list them
         render_gui.removeTextComponent('MainPage.GUI', '02')
@@ -149,6 +162,7 @@ class OpenProjectAction:
             pos=('0.02', '0.08'),
             id='01',
         )
+        app.move_run_button_to_bottom()
         app.change_page('InProject', [('01', 30)])
 
 
@@ -183,6 +197,7 @@ def save_project_action(app):
             id='01',
         )
         app.current_project = name.strip()
+        app.move_run_button_to_bottom()
         app.change_page('InProject', [('01', 30)])
 
 def save_project(inp):
