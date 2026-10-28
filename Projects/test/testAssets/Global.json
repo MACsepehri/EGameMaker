@@ -1,0 +1,8 @@
+
+{
+    "fullscreen":false,
+    "base.window.size":[500,500],
+    "fps":60,
+    "title":"test",
+    "background":[255,255,255]
+}

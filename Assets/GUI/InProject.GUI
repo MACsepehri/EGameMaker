@@ -1,2 +1,3 @@
 TEXT=(Project Name :,(0.02,0.03),02)
-TEXT=(he,(0.02,0.08),01)
+TEXT=(test,(0.02,0.08),01)
+BUTTON=(Run,(0.02,0.35),03,InProject/03.pkl)

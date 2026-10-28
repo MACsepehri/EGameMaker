@@ -1,14 +1,13 @@
 
 ### FREE AND OPEN-SOURCE
 ### EGameMaker
-### Libraries that used for this project :
-###  - tkinter
-###  - pygame
 ### ---------------------------------------------
 
 import os
+import sys
 import pickle
 import tkinter as tk
+import subprocess as sub
 from tkinter import messagebox as tk_alert
 from Assets.GUI.Render.RenderGUIComponent import RenderGUIComponent
 
@@ -25,11 +24,13 @@ class EGameMaker(tk.Tk):
         self.title('EGameMaker : Game maker engine')
         self.current_page = 'MainPage'
         self.components = []
+        self.current_project = None
         self.after(100, self.maximize)
         render_gui.init_app(self)
         render_gui.init_font()
         self.create_new_project()
         self.create_project_action()
+        self.create_inproject_action()
 
         projects = os.listdir('Projects')
         if len(projects) < 1:
@@ -80,6 +81,15 @@ class EGameMaker(tk.Tk):
 
         with open(path, 'wb') as file:
             pickle.dump(save_project_action, file)
+
+    def create_inproject_action(self):
+        # add pkl object func to run the currently open project
+        path = 'Assets/Action/InProject/03.pkl'
+
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+
+        with open(path, 'wb') as file:
+            pickle.dump(run_current_project, file)
 
     def show_projects(self, projects):
         # user has projects -> remove the "no projects" text and list them
@@ -132,6 +142,7 @@ class OpenProjectAction:
         self.project_name = project_name
 
     def __call__(self, app):
+        app.current_project = self.project_name
         render_gui.addTextComponent(
             'InProject.GUI',
             text=self.project_name,
@@ -139,6 +150,16 @@ class OpenProjectAction:
             id='01',
         )
         app.change_page('InProject', [('01', 30)])
+
+
+def run_current_project(app):
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    run_project(project_name)
 
 
 def save_project_action(app):
@@ -161,6 +182,7 @@ def save_project_action(app):
             pos=('0.02', '0.08'),
             id='01',
         )
+        app.current_project = name.strip()
         app.change_page('InProject', [('01', 30)])
 
 def save_project(inp):
@@ -252,6 +274,9 @@ FPS = content["fps"]
 BACKGROUND_COLOR = (content["background"][0],content["background"][1],content["background"][2])
 WINDOW_TITLE = content["title"]''')
 
+def run_project(name):
+    ### WARNING DON'T CHANGE THIS FUNCTION!
+    sub.Popen([sys.executable, f'{name}.py'], cwd=f'Projects/{name}')
 
 app = EGameMaker()
 
