@@ -18,6 +18,10 @@ class RenderGUIComponent:
         self.fonts = {}
         self.buttons = {}
         self.entries = {}
+        self.checkboxes = {}
+        self.checkbox_widgets = {}
+        self.text_widgets = {}
+        self.windows = {}
         self.base_dir = base_dir
         self.action_base_dir = 'Assets/Action'
 
@@ -54,8 +58,11 @@ class RenderGUIComponent:
         self.renderButton(component_file)
         self.renderInput(component_file)
 
-    def renderText(self, component_file='', font=None):
-        if self._app is None:
+    def renderText(self, component_file='', font=None, master=None):
+        if master is None:
+            master = self._app
+
+        if master is None:
             raise RuntimeError('Application has not been initialized.')
 
         if component_file not in self.content:
@@ -81,7 +88,7 @@ class RenderGUIComponent:
                 font_size = font_sizes.get(text_id, 14)
 
                 component_font = tkfont.Font(
-                    root=self._app,
+                    root=master,
                     family=(
                         self.font.actual('family')
                         if self.font
@@ -91,7 +98,7 @@ class RenderGUIComponent:
                 )
 
                 label = tk.Label(
-                    self._app,
+                    master,
                     text=text,
                     font=component_font
                 )
@@ -102,13 +109,17 @@ class RenderGUIComponent:
                 )
 
                 self.fonts[text_id] = component_font
+                self.text_widgets.setdefault(component_file, {})[text_id] = label
 
             except (ValueError, IndexError, tk.TclError) as error:
                 # print(f'Unable to render GUI component: {error}')
                 print(f'Unable to render GUI component: {error} | Content: {content!r}')
 
-    def renderButton(self, component_file):
-        if self._app is None:
+    def renderButton(self, component_file, master=None):
+        if master is None:
+            master = self._app
+
+        if master is None:
             raise RuntimeError('Application has not been initialized.')
 
         if component_file not in self.content:
@@ -124,7 +135,7 @@ class RenderGUIComponent:
                 text, pos, button_id, action_path = self.parse_button(content)
 
                 button = tk.Button(
-                    self._app,
+                    master,
                     text=text,
                     command=lambda path=action_path: self.execute_action(path)
                 )
@@ -140,16 +151,18 @@ class RenderGUIComponent:
                 # print(f'Unable to render GUI component: {error}')
                 print(f'Unable to render GUI component: {error} | Content: {content!r}')
 
-    def renderInput(self, component_file):
-        if self._app is None:
+    def renderInput(self, component_file, master=None):
+        if master is None:
+            master = self._app
+            self.entries.clear()
+
+        if master is None:
             raise RuntimeError('Application has not been initialized.')
 
         if component_file not in self.content:
             raise FileNotFoundError(
                 f'GUI component file not found: {component_file}.GUI'
             )
-
-        self.entries.clear()
 
         for content in self.content[component_file]:
             if not content.startswith('INPUT='):
@@ -158,7 +171,7 @@ class RenderGUIComponent:
             try:
                 pos, input_id = self.parse_input(content)
 
-                entry = tk.Entry(self._app)
+                entry = tk.Entry(master)
 
                 entry.place(
                     relx=float(pos[0]),
@@ -169,6 +182,81 @@ class RenderGUIComponent:
 
             except (ValueError, IndexError, tk.TclError) as error:
                 print(f'Unable to render GUI component: {error} | Content: {content!r}')
+
+    def renderCheckbox(self, component_file, master=None):
+        if master is None:
+            master = self._app
+
+        if master is None:
+            raise RuntimeError('Application has not been initialized.')
+
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        for content in self.content[component_file]:
+            if not content.startswith('CHECKBOX='):
+                continue
+
+            try:
+                text, pos, checkbox_id = self.parse_checkbox(content)
+
+                variable = tk.BooleanVar(master)
+                widget = tk.Checkbutton(
+                    master,
+                    text=text,
+                    variable=variable
+                )
+
+                widget.place(
+                    relx=float(pos[0]),
+                    rely=float(pos[1])
+                )
+
+                self.checkboxes[checkbox_id] = variable
+                self.checkbox_widgets[checkbox_id] = widget
+
+            except (ValueError, IndexError, tk.TclError) as error:
+                print(f'Unable to render GUI component: {error} | Content: {content!r}')
+
+    def open_component_window(
+        self,
+        component_file,
+        title='',
+        geometry='',
+        text_font=None
+    ):
+        if self._app is None:
+            raise RuntimeError('Application has not been initialized.')
+
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        window = tk.Toplevel(self._app)
+
+        if title:
+            window.title(title)
+
+        if geometry:
+            window.geometry(geometry)
+
+        self.renderText(component_file, text_font, window)
+        self.renderCheckbox(component_file, window)
+        self.renderInput(component_file, window)
+        self.renderButton(component_file, window)
+
+        self.windows[component_file] = window
+
+        return window
+
+    def close_component_window(self, component_file):
+        window = self.windows.pop(component_file, None)
+
+        if window is not None and window.winfo_exists():
+            window.destroy()
 
     def getInputValue(self, input_id):
         entry = self.entries.get(str(input_id))
@@ -254,6 +342,64 @@ class RenderGUIComponent:
         x, y = position[1:-1].split(',', 1)
 
         return (x, y), input_id
+
+    def parse_checkbox(self, content):
+        content = content.strip()
+
+        if not content.startswith('CHECKBOX=(') or not content.endswith(')'):
+            raise ValueError(f'Invalid CHECKBOX component format: {content!r}')
+
+        content = content[len('CHECKBOX=('):-1]
+        text, remaining = content.split(',(', 1)
+        position, checkbox_id = remaining.split('),', 1)
+        x, y = position.split(',', 1)
+
+        return text, (x, y), checkbox_id
+
+    def getCheckbox(self, component_file, checkbox_id):
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        variable = self.checkboxes.get(str(checkbox_id))
+
+        if variable is None:
+            raise KeyError(f'Checkbox component not found: {checkbox_id}')
+
+        return variable
+
+    def getCheckboxWidget(self, component_file, checkbox_id):
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        widget = self.checkbox_widgets.get(str(checkbox_id))
+
+        if widget is None:
+            raise KeyError(f'Checkbox component not found: {checkbox_id}')
+
+        if not widget.winfo_exists():
+            raise RuntimeError(f'Checkbox component has been destroyed: {checkbox_id}')
+
+        return widget
+
+    def setText(self, component_file, text_id, text):
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        label = self.text_widgets.get(component_file, {}).get(str(text_id))
+
+        if label is None:
+            raise KeyError(f'Text component not found: {text_id}')
+
+        if not label.winfo_exists():
+            raise RuntimeError(f'Text component has been destroyed: {text_id}')
+
+        label.config(text=text)
 
 
     def addTextComponent(self, component_file, text='', pos=(0, 0), id=''):
