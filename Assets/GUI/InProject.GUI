@@ -1,5 +1,5 @@
 TEXT=(Project Name :,(0.02,0.03),02)
-TEXT=(test,(0.02,0.08),01)
+TEXT=(sss,(0.02,0.08),01)
 
 # # # 
 
@@ -9,7 +9,7 @@ BUTTON=(Add Text,(0.02,0.31),003,InProject/03.pkl)
 BUTTON=(Add Image,(0.02,0.34),004,InProject/03.pkl)
 BUTTON=(Window Configure,(0.02,0.37),005,InProject/03.pkl)
 BUTTON=(Game Configure,(0.02,0.4),006,InProject/03.pkl)
-BUTTON=(Add directory,(0.02,0.43),007,InProject/007.pkl)
+BUTTON=(Create directory,(0.02,0.43),007,InProject/007.pkl)
 
 # # # 
 
