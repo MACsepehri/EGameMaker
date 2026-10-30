@@ -231,8 +231,9 @@ class OpenProjectAction:
         global game_name
 
         self.project_name = project_name
-        self.save_pickle_object('007',get_directory)
-        self.save_pickle_object('006',add_state)
+        self.save_pickle_object('008',get_directory)
+        self.save_pickle_object('007',add_state)
+        self.save_pickle_object('005',show_all_states)
 
 
     def __call__(self, app):
@@ -249,6 +250,10 @@ class OpenProjectAction:
 
     def save_pickle_object(self, filename, func):
         _path = f"Assets/Action/InProject/{filename}.pkl"
+
+        if not os.path.exists(_path):
+            with open(_path,"x"):
+                pass
 
         os.makedirs(os.path.dirname(_path), exist_ok=True)
 
@@ -733,19 +738,33 @@ def pick_background_color(app):
 
 def add_state(app):
     ### Adding new state in 'Global.json' file for every project
-    
-    state_value = simpledialog.askstring('Add new state','Enter state value :', parent=app)
-    global_project_data = load_global_json(app.current_project)
-    
-    for states in global_project_data['states']:
-        if states.lower().strip() == state_value.lower().strip():
-            tk_alert.showerror('Error',f'State "{state_value}" is already exist.')
-            return
-    
-    global_project_data['states'][state_value] = {}
 
-    write_global_json(app.current_project, global_project_data)
-    tk_alert.showinfo('Success','Successfully added new state!')
+    try:
+        state_value = simpledialog.askstring('Add new state','Enter state value :', parent=app)
+        global_project_data = load_global_json(app.current_project)
+        
+        for states in global_project_data['states']:
+            if states.lower().strip() == state_value.lower().strip():
+                tk_alert.showerror('Error',f'State "{state_value}" is already exist.')
+                return
+        
+        global_project_data['states'][state_value] = {}
+
+        write_global_json(app.current_project, global_project_data)
+        tk_alert.showinfo('Success','Successfully added new state!')
+    except:
+        pass
+
+def show_all_states(app):
+    ### Show all states from project 'Global.json' file
+    global_project_data = load_global_json(app.current_project)
+    string_result = ''
+    index = 1
+    for states in global_project_data['states']:
+        string_result += f'{index}. {states}\n'
+        index += 1
+    
+    tk_alert.showinfo('All States',f'All states in global json file :\n\n{string_result}')
     
 
 def run_project(name):
