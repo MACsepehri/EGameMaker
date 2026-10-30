@@ -18,6 +18,7 @@ class RenderGUIComponent:
         self.fonts = {}
         self.buttons = {}
         self.entries = {}
+        self.codes = {}
         self.checkboxes = {}
         self.checkbox_widgets = {}
         self.text_widgets = {}
@@ -57,6 +58,7 @@ class RenderGUIComponent:
         self.renderText(component_file, text_font)
         self.renderButton(component_file)
         self.renderInput(component_file)
+        self.renderCode(component_file)
 
     def renderText(self, component_file='', font=None, master=None):
         if master is None:
@@ -246,6 +248,7 @@ class RenderGUIComponent:
         self.renderText(component_file, text_font, window)
         self.renderCheckbox(component_file, window)
         self.renderInput(component_file, window)
+        self.renderCode(component_file, window)
         self.renderButton(component_file, window)
 
         self.windows[component_file] = window
@@ -257,6 +260,37 @@ class RenderGUIComponent:
 
         if window is not None and window.winfo_exists():
             window.destroy()
+
+    def renderCode(self, component_file, master=None):
+        if master is None:
+            master = self._app
+
+        if master is None:
+            raise RuntimeError('Application has not been initialized.')
+
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        for content in self.content[component_file]:
+            if not content.startswith('CODE='):
+                continue
+
+            try:
+                pos, width, height, code_id = self.parse_code(content)
+
+                code = tk.Text(master, width=width, height=height)
+
+                code.place(
+                    relx=float(pos[0]),
+                    rely=float(pos[1])
+                )
+
+                self.codes[code_id] = code
+
+            except (ValueError, IndexError, tk.TclError) as error:
+                print(f'Unable to render GUI component: {error} | Content: {content!r}')
 
     def getInputValue(self, input_id):
         entry = self.entries.get(str(input_id))
@@ -326,6 +360,29 @@ class RenderGUIComponent:
         button_id, action_path = parts
 
         return text, (x, y), button_id, action_path
+
+    def parse_code(self, content):
+        content = content.strip()
+
+        if not content.startswith('CODE=(') or not content.endswith(')'):
+            raise ValueError(f'Invalid CODE component format: {content!r}')
+
+        content = content[len('CODE=('):-1]
+
+        if not content.startswith('('):
+            raise ValueError(f'Invalid CODE position format: {content!r}')
+
+        close = content.index(')')
+        x, y = content[1:close].split(',', 1)
+
+        parts = content[close + 1:].strip().lstrip(',').split(',')
+
+        if len(parts) != 3:
+            raise ValueError(f'CODE requires width, height and an ID: {content!r}')
+
+        width, height, code_id = parts
+
+        return (x, y), int(width), int(height), code_id
 
     def parse_input(self, content):
         content = content.strip()
@@ -648,3 +705,22 @@ class RenderGUIComponent:
             raise RuntimeError(f'Input component has been destroyed: {input_id}')
 
         return entry
+
+    def getCode(self, component_file, code_id):
+        if component_file not in self.content:
+            raise FileNotFoundError(
+                f'GUI component file not found: {component_file}.GUI'
+            )
+
+        code = self.codes.get(str(code_id))
+
+        if code is None:
+            raise KeyError(f'Code component not found: {code_id}')
+
+        if not code.winfo_exists():
+            raise RuntimeError(f'Code component has been destroyed: {code_id}')
+
+        return code
+
+    def getCodeValue(self, component_file, code_id):
+        return self.getCode(component_file, code_id).get('1.0', 'end-1c')

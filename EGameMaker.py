@@ -18,6 +18,9 @@ from Assets.GUI.Render.RenderGUIComponent import RenderGUIComponent
 
 render_gui = RenderGUIComponent()
 
+### pkl path of the action function of the button currently being configured
+_button_action_path = None
+
 
 class EGameMaker(tk.Tk):
     ### main class of GUI
@@ -37,6 +40,7 @@ class EGameMaker(tk.Tk):
         self.create_inproject_action()
         self.create_game_configure_action()
         self.create_button_configure_action()
+        self.create_button_action_action()
 
         projects = os.listdir('Projects')
         if len(projects) < 1:
@@ -126,14 +130,30 @@ class EGameMaker(tk.Tk):
                 pickle.dump(func, file)
 
     def create_button_configure_action(self):
-        # add pkl object funcs used by the ButtonConfigure window buttons
+        # add pkl object funcs used by the AddButton window buttons
         actions = {
             '40': save_button_configure,
             '41': close_button_configure_window,
+            '42': open_button_action_window,
         }
 
         for action_id, func in actions.items():
-            path = f'Assets/Action/ButtonConfigure/{action_id}.pkl'
+            path = f'Assets/Action/AddButton/{action_id}.pkl'
+
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            with open(path, 'wb') as file:
+                pickle.dump(func, file)
+
+    def create_button_action_action(self):
+        # add pkl object funcs used by the ButtonAction window buttons
+        actions = {
+            '50': save_button_action,
+            '51': close_button_action_window,
+        }
+
+        for action_id, func in actions.items():
+            path = f'Assets/Action/ButtonAction/{action_id}.pkl'
 
             os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -812,11 +832,11 @@ def add_button(app):
         tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
         return
 
-    render_gui.close_component_window('ButtonConfigure')
+    render_gui.close_component_window('AddButton')
 
     window = render_gui.open_component_window(
-        'ButtonConfigure',
-        title=f'Button Configure : {project_name}',
+        'AddButton',
+        title=f'Add Button : {project_name}',
         geometry='420x480',
         text_font=[
             ('00', 20),
@@ -834,7 +854,7 @@ def add_button(app):
     window.transient(app)
 
     def fill(entry_id, value):
-        entry = render_gui.getInput('ButtonConfigure', entry_id)
+        entry = render_gui.getInput('AddButton', entry_id)
         entry.delete(0, tk.END)
         entry.insert(0, value)
 
@@ -849,8 +869,11 @@ def add_button(app):
 
 
 def save_button_configure(app):
-    ### Save button of the ButtonConfigure window
-    ### writes the configured button into the chosen state of Global.json
+    ### Save button of the AddButton window
+    ### writes the configured button (and its action pkl path) into the
+    ### chosen state of Global.json
+
+    global _button_action_path
 
     project_name = getattr(app, 'current_project', None)
 
@@ -922,15 +945,159 @@ def save_button_configure(app):
         f'text_color={_format_values(text_color)}',
     ]) + ')'
 
-    data['states'][state].append(button_entry)
+    ### if the action window is open with written code, save it now
+    ### so the button keeps the pkl path of its action function
+    if _button_action_path is None:
+        try:
+            if render_gui.getCodeValue('ButtonAction', '44').strip():
+                save_button_action(app)
+        except (KeyError, RuntimeError):
+            pass
+
+    data['states'][state].append([button_entry, _button_action_path])
 
     write_global_json(project_name, data)
+    _button_action_path = None
     tk_alert.showinfo('Saved', f'Button "{text}" added to state "{state}".')
 
 
 def close_button_configure_window(app):
     ### Close button of the ButtonConfigure window
-    render_gui.close_component_window('ButtonConfigure')
+    render_gui.close_component_window('AddButton')
+
+
+def open_button_action_window(app):
+    ### Write Action button of the AddButton window
+    ### opens a window to write the python action code of the new button
+
+    project_name = getattr(app, 'current_project', None)
+
+    render_gui.close_component_window('ButtonAction')
+
+    title = f'Button Action : {project_name}' if project_name else 'Button Action'
+
+    window = render_gui.open_component_window(
+        'ButtonAction',
+        title=title,
+        geometry='520x460',
+        text_font=[
+            ('00', 20),
+            ('43', 12),
+        ],
+    )
+    window.transient(app)
+
+
+def empty_button_action():
+    ### pkl object written when the user leaves the action code null
+    pass
+
+
+def save_button_action(app):
+    ### Save button of the ButtonAction window
+    ### compiles the written code, pickles the created function object and
+    ### remembers the pkl path for the button that is being configured
+
+    global _button_action_path
+
+    try:
+        code = render_gui.getCodeValue('ButtonAction', '44')
+    except (KeyError, RuntimeError):
+        tk_alert.showerror('Error', 'Action window is not open.')
+        return
+
+    if code.strip():
+        func = _compile_button_action_code(code)
+
+        if func is None:
+            return
+    else:
+        func = empty_button_action
+
+    button_text = _read_button_field(app, '22') or ''
+
+    path = _store_button_action_pickle(
+        getattr(app, 'current_project', None),
+        button_text,
+        func,
+    )
+
+    if path is None:
+        return
+
+    _button_action_path = path
+    tk_alert.showinfo('Saved', f'Action saved to {path}.')
+
+
+def close_button_action_window(app):
+    ### Close button of the ButtonAction window
+    render_gui.close_component_window('ButtonAction')
+
+
+def _compile_button_action_code(code):
+    ### exec the user code in the app module namespace and return the
+    ### function object that the code defines
+
+    tracked = {
+        name: id(value)
+        for name, value in globals().items()
+        if callable(value)
+    }
+
+    try:
+        exec(compile(code, '<button_action>', 'exec'), globals())
+    except Exception as error:
+        tk_alert.showerror('Error', f'Invalid action code:\n{error}')
+        return None
+
+    for name, value in globals().items():
+        if not callable(value) or name.startswith('_'):
+            continue
+
+        if tracked.get(name) != id(value):
+            return value
+
+    tk_alert.showerror('Error', 'The action code must define a function.')
+    return None
+
+
+def _store_button_action_pickle(project_name, button_text, func):
+    ### pickle the action function object into the project action folder
+    ### the file name is the button text, then the next_id and the .pkl
+    ### extension
+
+    folder = f'Projects/{project_name}/{project_name}Assets/Action'
+
+    os.makedirs(folder, exist_ok=True)
+
+    def trailing_id(name):
+        digits = ''
+
+        for char in reversed(name[:-4]):
+            if char.isdigit():
+                digits = char + digits
+            else:
+                break
+
+        return int(digits) if digits else None
+
+    existing = [
+        value
+        for value in (
+            trailing_id(name)
+            for name in os.listdir(folder)
+            if name.endswith('.pkl')
+        )
+        if value is not None
+    ]
+
+    next_id = max(existing) + 1 if existing else 1
+    path = f'{folder}/{button_text}{next_id}.pkl'
+
+    with open(path, 'wb') as file:
+        pickle.dump(func, file)
+
+    return path
 
 
 def _format_values(values):
@@ -939,7 +1106,7 @@ def _format_values(values):
 
 def _read_button_field(app, entry_id):
     try:
-        return render_gui.getInput('ButtonConfigure', entry_id).get().strip()
+        return render_gui.getInput('AddButton', entry_id).get().strip()
     except (KeyError, RuntimeError):
         return None
 

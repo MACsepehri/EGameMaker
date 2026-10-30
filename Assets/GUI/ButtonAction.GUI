@@ -1,0 +1,5 @@
+TEXT=(Button Action :,(0.05,0.04),00)
+TEXT=(Write the Python action for this button :,(0.05,0.12),43)
+CODE=((0.05,0.2),46,16,44)
+BUTTON=(Save,(0.05,0.93),50,ButtonAction/50.pkl)
+BUTTON=(Close,(0.3,0.93),51,ButtonAction/51.pkl)

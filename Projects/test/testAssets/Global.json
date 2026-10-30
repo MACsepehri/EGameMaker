@@ -1,12 +1,30 @@
-
 {
-    "fullscreen":false,
-    "base.window.size":[500,500],
-    "fps":60,
-    "title":"test",
-    "background":[255,255,255],
-
+    "fullscreen": false,
+    "base.window.size": [
+        500,
+        500
+    ],
+    "fps": 60,
+    "title": "test",
+    "background": [
+        60,
+        137,
+        72
+    ],
     "states": {
-        "main": []
+        "main": [
+            [
+                "BUTTON(text=start,pos=[0.5,0.5],size=[150,50],font_name=base_font,font_size=14,base_color=[200,200,200],hover_color=[255,255,0],text_color=[0,0,0])",
+                null
+            ],
+            [
+                "BUTTON(text=test,pos=[0.5,0.5],size=[150,50],font_name=base_font,font_size=14,base_color=[200,200,200],hover_color=[255,255,0],text_color=[0,0,0])",
+                null
+            ],
+            [
+                "BUTTON(text=test,pos=[0.5,0.5],size=[150,50],font_name=base_font,font_size=14,base_color=[200,200,200],hover_color=[255,255,0],text_color=[0,0,0])",
+                "Projects/test/testAssets/Action/1.pkl"
+            ]
+        ]
     }
 }
