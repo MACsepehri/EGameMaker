@@ -7,6 +7,7 @@ import os
 import sys
 import json
 import pickle
+import shutil
 import tkinter as tk
 import tkinter.colorchooser
 import subprocess as sub
@@ -101,6 +102,12 @@ class EGameMaker(tk.Tk):
         with open(path, 'wb') as file:
             pickle.dump(set_game_configure, file)
 
+        # add pkl object func to remove the currently open project
+        path = 'Assets/Action/InProject/009.pkl'
+
+        with open(path, 'wb') as file:
+            pickle.dump(remove_current_project, file)
+
     def create_game_configure_action(self):
         # add pkl object funcs used by the GameConfigure window buttons
         actions = {
@@ -154,6 +161,49 @@ class EGameMaker(tk.Tk):
                 action_path=action_path,
             )
 
+    def refresh_projects(self):
+        ### rebuild the project button list of the main page
+        stale_ids = []
+
+        for line in render_gui.content['MainPage']:
+            if not line.startswith('BUTTON='):
+                continue
+
+            try:
+                _, _, button_id, _ = render_gui.parse_button(line)
+            except (ValueError, IndexError):
+                continue
+
+            if button_id != '03':
+                stale_ids.append(button_id)
+
+        for button_id in stale_ids:
+            render_gui.removeButtonComponent('MainPage.GUI', button_id)
+
+            pkl_path = f'Assets/Action/MainPage/{button_id}.pkl'
+
+            if os.path.isfile(pkl_path):
+                os.remove(pkl_path)
+
+        projects = (
+            [
+                name for name in os.listdir('Projects')
+                if os.path.isdir(os.path.join('Projects', name))
+            ]
+            if os.path.isdir('Projects')
+            else []
+        )
+
+        if not projects:
+            render_gui.addTextComponent(
+                'MainPage.GUI',
+                "You don't have any projects...",
+                ('0.02', '0.15'),
+                '02'
+            )
+        else:
+            self.show_projects(projects)
+
     def change_page(self, new_state, text_font=None):
         for component in self.components:
             if component.winfo_exists() and not isinstance(component, tk.Toplevel):
@@ -181,7 +231,8 @@ class OpenProjectAction:
         global game_name
 
         self.project_name = project_name
-        self.create_directory()
+        self.save_pickle_object('007',get_directory)
+        self.save_pickle_object('006',add_state)
 
 
     def __call__(self, app):
@@ -196,15 +247,14 @@ class OpenProjectAction:
         app.move_run_button_to_bottom()
         app.change_page('InProject', [('01', 30)])
 
-    def create_directory(self):
-        path = "Assets/Action/InProject/007.pkl"
+    def save_pickle_object(self, filename, func):
+        _path = f"Assets/Action/InProject/{filename}.pkl"
 
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        os.makedirs(os.path.dirname(_path), exist_ok=True)
 
-        if not os.path.isfile(path) or os.path.getsize(path) == 0:
-            with open(path, "wb") as file:
-                pickle.dump(get_directory, file)
-            
+        if not os.path.isfile(_path) or os.path.getsize(_path) == 0:
+            with open(_path, "wb") as file:
+                pickle.dump(func, file)
 
 
 def run_current_project(app):
@@ -215,6 +265,28 @@ def run_current_project(app):
         return
 
     run_project(project_name)
+
+
+def remove_current_project(app):
+    ### Remove Project button of the InProject page
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    if not tk_alert.askyesno(
+        'Remove Project',
+        f'Remove project "{project_name}"? This cannot be undone.'
+    ):
+        return
+
+    shutil.rmtree(f'Projects/{project_name}', ignore_errors=True)
+
+    app.current_project = None
+    render_gui.close_component_window('GameConfigure')
+    app.refresh_projects()
+    app.change_page('MainPage', [('01', 30)])
 
 
 def save_project_action(app):
@@ -658,6 +730,23 @@ def pick_background_color(app):
         'Saved',
         f'Background color saved to {project_name}Assets/Global.json.'
     )
+
+def add_state(app):
+    ### Adding new state in 'Global.json' file for every project
+    
+    state_value = simpledialog.askstring('Add new state','Enter state value :', parent=app)
+    global_project_data = load_global_json(app.current_project)
+    
+    for states in global_project_data['states']:
+        if states.lower().strip() == state_value.lower().strip():
+            tk_alert.showerror('Error',f'State "{state_value}" is already exist.')
+            return
+    
+    global_project_data['states'][state_value] = {}
+
+    write_global_json(app.current_project, global_project_data)
+    tk_alert.showinfo('Success','Successfully added new state!')
+    
 
 def run_project(name):
     ### WARNING DON'T CHANGE THIS FUNCTION!

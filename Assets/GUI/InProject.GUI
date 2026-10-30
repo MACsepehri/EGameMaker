@@ -1,5 +1,4 @@
 TEXT=(Project Name :,(0.02,0.03),02)
-TEXT=(test,(0.02,0.08),01)
 
 # # # 
 
@@ -7,10 +6,12 @@ BUTTON=(Add Button,(0.02,0.25),001,InProject/03.pkl)
 BUTTON=(Add Font,(0.02,0.28),002,InProject/03.pkl)
 BUTTON=(Add Text,(0.02,0.31),003,InProject/03.pkl)
 BUTTON=(Add Image,(0.02,0.34),004,InProject/03.pkl)
-BUTTON=(Window Configure,(0.02,0.37),005,InProject/03.pkl)
+BUTTON=(Add State,(0.02,0.37),005,InProject/006.pkl)
 BUTTON=(Game Configure,(0.02,0.4),006,InProject/008.pkl)
-BUTTON=(Create directory,(0.02,0.43),007,InProject/007.pkl)
+BUTTON=(Create Directory,(0.02,0.43),007,InProject/007.pkl)
 
 # # # 
 
 BUTTON=(Run,(0.02,0.9000),03,InProject/03.pkl)
+BUTTON=(Remove Project,(0.08,0.9000),009,InProject/009.pkl)
+TEXT=(test,(0.02,0.08),01)

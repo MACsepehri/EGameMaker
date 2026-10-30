@@ -1,17 +1,18 @@
 {
     "fullscreen": false,
     "base.window.size": [
-        600,
+        500,
         500
     ],
-    "fps": 60,
+    "fps": 120,
     "title": "test",
     "background": [
-        255,
-        92,
-        255
+        84,
+        129,
+        251
     ],
     "states": {
-        "main": {}
+        "main": {},
+        "test": {}
     }
 }
