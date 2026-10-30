@@ -36,6 +36,7 @@ class EGameMaker(tk.Tk):
         self.create_project_action()
         self.create_inproject_action()
         self.create_game_configure_action()
+        self.create_button_configure_action()
 
         projects = os.listdir('Projects')
         if len(projects) < 1:
@@ -118,6 +119,21 @@ class EGameMaker(tk.Tk):
 
         for action_id, func in actions.items():
             path = f'Assets/Action/GameConfigure/{action_id}.pkl'
+
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            with open(path, 'wb') as file:
+                pickle.dump(func, file)
+
+    def create_button_configure_action(self):
+        # add pkl object funcs used by the ButtonConfigure window buttons
+        actions = {
+            '40': save_button_configure,
+            '41': close_button_configure_window,
+        }
+
+        for action_id, func in actions.items():
+            path = f'Assets/Action/ButtonConfigure/{action_id}.pkl'
 
             os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -235,6 +251,7 @@ class OpenProjectAction:
         self.save_pickle_object('008',get_directory)
         self.save_pickle_object('006',show_all_states)
         self.save_pickle_object('005',add_state)
+        self.save_pickle_object('001',add_button)
 
 
     def __call__(self, app):
@@ -397,7 +414,7 @@ if __name__ == "__main__":
     "background":[255,255,255],
 
     "states": {
-        "main": {}
+        "main": []
     }
 }''')
 
@@ -749,7 +766,7 @@ def add_state(app):
                 tk_alert.showerror('Error',f'State "{state_value}" is already exist.')
                 return
         
-        global_project_data['states'][state_value] = {}
+        global_project_data['states'][state_value] = []
 
         write_global_json(app.current_project, global_project_data)
         tk_alert.showinfo('Success','Successfully added new state!')
@@ -776,7 +793,242 @@ def show_all_dir_and_files(app):
         string_result += f'{index}. {states}\n'
         index += 1
     
-    tk_alert.showinfo('All Assets Directories and Files',f'All directories/files in assets :\n\n{string_result}')    
+    tk_alert.showinfo('All Assets Directories and Files',f'All directories/files in assets :\n\n{string_result}')
+
+def add_button(app):
+    ### Add Button button of the InProject page
+    ### opens a window to configure a new button, then stores it in the
+    ### chosen state of the project Global.json
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    render_gui.close_component_window('ButtonConfigure')
+
+    window = render_gui.open_component_window(
+        'ButtonConfigure',
+        title=f'Button Configure : {project_name}',
+        geometry='420x480',
+        text_font=[
+            ('00', 20),
+            ('21', 12),
+            ('23', 12),
+            ('25', 12),
+            ('27', 12),
+            ('29', 12),
+            ('31', 12),
+            ('33', 12),
+            ('35', 12),
+            ('37', 12),
+        ],
+    )
+    window.transient(app)
+
+    def fill(entry_id, value):
+        entry = render_gui.getInput('ButtonConfigure', entry_id)
+        entry.delete(0, tk.END)
+        entry.insert(0, value)
+
+    fill('20', next(iter(data.get('states') or {'main': []}), 'main'))
+    fill('24', '255,255,0')
+    fill('26', '200,200,200')
+    fill('28', '0,0,0')
+    fill('30', 'base_font')
+    fill('32', '14')
+    fill('34', '0.5,0.5')
+    fill('36', '150,50')
+
+
+def save_button_configure(app):
+    ### Save button of the ButtonConfigure window
+    ### writes the configured button into the chosen state of Global.json
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    state = _read_button_field(app, '20')
+
+    if state is None:
+        tk_alert.showerror('Error', 'Button configure window is not open.')
+        return
+
+    if not state:
+        tk_alert.showerror('Error', 'State cannot be empty.')
+        return
+
+    if state not in data.get('states', {}):
+        tk_alert.showerror(
+            'Error',
+            f'State "{state}" does not exist. Add it first with "Add State".'
+        )
+        return
+
+    text = _read_button_field(app, '22')
+
+    if not text:
+        tk_alert.showerror('Error', 'Button text cannot be empty.')
+        return
+
+    hover_color = _read_rgb_field(app, '24', 'Hover color')
+    base_color = _read_rgb_field(app, '26', 'Base color')
+    text_color = _read_rgb_field(app, '28', 'Text color')
+    font_name = _read_button_field(app, '30')
+
+    if not font_name:
+        tk_alert.showerror('Error', 'Font name cannot be empty.')
+        font_name = None
+
+    font_size = _read_int_field(app, '32', 'Font size')
+    position = _read_pair_field(app, '34', 'Position')
+    size = _read_pair_field(app, '36', 'Size', integer=True, minimum=1)
+
+    if (
+        hover_color is None
+        or base_color is None
+        or text_color is None
+        or font_name is None
+        or font_size is None
+        or position is None
+        or size is None
+    ):
+        return
+
+    button_entry = 'BUTTON(' + ','.join([
+        f'text={text}',
+        f'pos={_format_values(position)}',
+        f'size={_format_values(size)}',
+        f'font_name={font_name}',
+        f'font_size={font_size}',
+        f'base_color={_format_values(base_color)}',
+        f'hover_color={_format_values(hover_color)}',
+        f'text_color={_format_values(text_color)}',
+    ]) + ')'
+
+    data['states'][state].append(button_entry)
+
+    write_global_json(project_name, data)
+    tk_alert.showinfo('Saved', f'Button "{text}" added to state "{state}".')
+
+
+def close_button_configure_window(app):
+    ### Close button of the ButtonConfigure window
+    render_gui.close_component_window('ButtonConfigure')
+
+
+def _format_values(values):
+    return '[' + ','.join(str(value) for value in values) + ']'
+
+
+def _read_button_field(app, entry_id):
+    try:
+        return render_gui.getInput('ButtonConfigure', entry_id).get().strip()
+    except (KeyError, RuntimeError):
+        return None
+
+
+def _read_int_field(app, entry_id, label, minimum=1, maximum=4096):
+    raw = _read_button_field(app, entry_id)
+
+    if raw is None:
+        return None
+
+    try:
+        value = int(raw)
+    except ValueError:
+        tk_alert.showerror('Error', f'{label} must be a number.')
+        return None
+
+    if value < minimum:
+        tk_alert.showerror('Error', f'{label} must be at least {minimum}.')
+        return None
+
+    if value > maximum:
+        tk_alert.showerror('Error', f'{label} must be at most {maximum}.')
+        return None
+
+    return value
+
+
+def _read_rgb_field(app, entry_id, label):
+    raw = _read_button_field(app, entry_id)
+
+    if raw is None:
+        return None
+
+    parts = [part.strip() for part in raw.split(',')]
+
+    if len(parts) != 3:
+        tk_alert.showerror('Error', f'{label} must be in the form "r,g,b".')
+        return None
+
+    try:
+        values = [int(part) for part in parts]
+    except ValueError:
+        tk_alert.showerror('Error', f'{label} values must be whole numbers.')
+        return None
+
+    if any(value < 0 or value > 255 for value in values):
+        tk_alert.showerror('Error', f'{label} values must be between 0 and 255.')
+        return None
+
+    return values
+
+
+def _read_pair_field(app, entry_id, label, integer=False, minimum=None):
+    raw = _read_button_field(app, entry_id)
+
+    if raw is None:
+        return None
+
+    parts = [part.strip() for part in raw.split(',')]
+
+    if len(parts) != 2:
+        tk_alert.showerror('Error', f'{label} must be in the form "a,b".')
+        return None
+
+    values = []
+
+    for part in parts:
+        if integer:
+            try:
+                value = int(part)
+            except ValueError:
+                tk_alert.showerror('Error', f'{label} values must be whole numbers.')
+                return None
+        else:
+            try:
+                float(part)
+            except ValueError:
+                tk_alert.showerror('Error', f'{label} values must be numbers.')
+                return None
+            value = part
+
+        if minimum is not None and float(part) < minimum:
+            tk_alert.showerror('Error', f'{label} values must be at least {minimum}.')
+            return None
+
+        values.append(value)
+
+    return values
+
 
 def run_project(name):
     ### WARNING DON'T CHANGE THIS FUNCTION!
