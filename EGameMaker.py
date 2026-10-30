@@ -97,13 +97,13 @@ class EGameMaker(tk.Tk):
             pickle.dump(run_current_project, file)
 
         # add pkl object func to open the game configure window
-        path = 'Assets/Action/InProject/008.pkl'
+        path = 'Assets/Action/InProject/007.pkl'
 
         with open(path, 'wb') as file:
             pickle.dump(set_game_configure, file)
 
         # add pkl object func to remove the currently open project
-        path = 'Assets/Action/InProject/009.pkl'
+        path = 'Assets/Action/InProject/0010.pkl'
 
         with open(path, 'wb') as file:
             pickle.dump(remove_current_project, file)
@@ -231,9 +231,10 @@ class OpenProjectAction:
         global game_name
 
         self.project_name = project_name
+        self.save_pickle_object('009',show_all_dir_and_files)
         self.save_pickle_object('008',get_directory)
-        self.save_pickle_object('007',add_state)
-        self.save_pickle_object('005',show_all_states)
+        self.save_pickle_object('006',show_all_states)
+        self.save_pickle_object('005',add_state)
 
 
     def __call__(self, app):
@@ -765,7 +766,17 @@ def show_all_states(app):
         index += 1
     
     tk_alert.showinfo('All States',f'All states in global json file :\n\n{string_result}')
+
+def show_all_dir_and_files(app):
+    ### Show all directories in project assets
+    dirs = os.listdir(f"Projects/{app.current_project}/{app.current_project}Assets")
+    string_result = ''
+    index = 1
+    for states in dirs:
+        string_result += f'{index}. {states}\n'
+        index += 1
     
+    tk_alert.showinfo('All Assets Directories and Files',f'All directories/files in assets :\n\n{string_result}')    
 
 def run_project(name):
     ### WARNING DON'T CHANGE THIS FUNCTION!

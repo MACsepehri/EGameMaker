@@ -1,7 +1,7 @@
 {
     "fullscreen": false,
     "base.window.size": [
-        500,
+        600,
         500
     ],
     "fps": 60,
