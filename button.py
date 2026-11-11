@@ -40,7 +40,7 @@ class Button:
 
         try:
             return pygame.font.Font(self.font_name, self.font_size)
-        except (FileNotFoundError, OSError):
+        except (FileNotFoundError, OSError, pygame.error):
             return pygame.font.Font(None, self.font_size)
 
     def set_enabled(self, enabled):

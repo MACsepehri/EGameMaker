@@ -26,6 +26,10 @@ _button_action_path = None
 ### currently being edited; None means a new button is being configured
 _edit_button_entry = None
 
+### (state, index, entry_string) of the Global.json text entry that is
+### currently being edited; None means a new text is being configured
+_edit_text_entry = None
+
 
 class EGameMaker(tk.Tk):
     ### main class of GUI
@@ -46,6 +50,7 @@ class EGameMaker(tk.Tk):
         self.create_game_configure_action()
         self.create_button_configure_action()
         self.create_button_action_action()
+        self.create_text_configure_action()
 
         projects = os.listdir('Projects')
         if len(projects) < 1:
@@ -159,6 +164,21 @@ class EGameMaker(tk.Tk):
 
         for action_id, func in actions.items():
             path = f'Assets/Action/ButtonAction/{action_id}.pkl'
+
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            with open(path, 'wb') as file:
+                pickle.dump(func, file)
+
+    def create_text_configure_action(self):
+        # add pkl object funcs used by the AddText window buttons
+        actions = {
+            '80': save_text_configure,
+            '81': close_text_configure_window,
+        }
+
+        for action_id, func in actions.items():
+            path = f'Assets/Action/AddText/{action_id}.pkl'
 
             os.makedirs(os.path.dirname(path), exist_ok=True)
 
@@ -281,6 +301,11 @@ class OpenProjectAction:
         self.save_pickle_object('012',remove_button)
         self.save_pickle_object('013',add_font)
         self.save_pickle_object('014',remove_font)
+        self.save_pickle_object('015',add_text)
+        self.save_pickle_object('016',edit_text)
+        self.save_pickle_object('017',remove_text)
+        self.save_pickle_object('018',edit_state)
+        self.save_pickle_object('019',remove_state)
 
 
     def __call__(self, app):
@@ -406,6 +431,7 @@ import pickle
 import os
 import __PROJECT_NAME__Assets.Global as Global
 from button import Button
+from text import Text
 
 pygame.init()
 
@@ -477,15 +503,54 @@ def parse_button_entry(entry, state_in):
         font_size=int(values.get('font_size', '14') or 14),
     )
 
+def parse_text_entry(entry, state_in):
+    ### turn a TEXT(...) entry of Global.texts into a Text
+    body = entry[len('TEXT('):-1]
+    values = {}
+
+    for part in split_top_level(body):
+        key, _, value = part.partition('=')
+        values[key.strip()] = value.strip()
+
+    def items(raw):
+        ### values are stored like [a,b,c]; strip one pair of [ ] then
+        ### split on the top-level commas
+        raw = raw.strip()
+
+        if raw.startswith('[') and raw.endswith(']'):
+            raw = raw[1:-1]
+
+        return [item for item in split_top_level(raw) if item != '']
+
+    def pair(key, cast):
+        raw = values.get(key, '')
+        return [cast(item) for item in items(raw)] if raw else None
+
+    def color(key, default):
+        raw = values.get(key, '')
+        return tuple(int(item) for item in items(raw)) if raw else default
+
+    return Text(
+        text=values.get('text', ''),
+        position=pair('pos', float) or (0.5, 0.5),
+        font_name=values.get('font_name', 'base_font') or 'base_font',
+        font_size=int(values.get('font_size', '32') or 32),
+        text_color=color('text_color', (0, 0, 0)),
+        state_in=state_in,
+    )
+
 class Game:
     ### the object passed to the user's action code as self, it carries
     ### the button vars and the Global vars
 
-    def __init__(self, win, buttons):
+    def __init__(self, win, buttons, texts):
         self.win = win
         self.Global = Global
         self.buttons = {button.text: button for button in buttons}
-        self.current_state = next(iter(Global.states), 'main')
+        self.texts = texts
+        self.current_state = getattr(
+            Global, 'current_state', next(iter(Global.states), 'main')
+        )
 
 def load_action(path):
     ### load a button's pickled action, the pkl stores the action source
@@ -530,13 +595,13 @@ def fire_action(action, game):
     else:
         action()
 
-def bind_button_font(button):
-    ### resolve the button's font name to a project font file and rebind
-    ### the button's font, names come from the fonts map of Global.json
-    if not button.font_name or button.font_name == 'base_font':
+def bind_component_font(component):
+    ### resolve a component's font name to a project font file and rebind
+    ### its font, names come from the fonts map of Global.json
+    if not component.font_name or component.font_name == 'base_font':
         return
 
-    font_path = (getattr(Global, 'fonts', {}) or {}).get(button.font_name)
+    font_path = (getattr(Global, 'fonts', {}) or {}).get(component.font_name)
 
     if not font_path:
         return
@@ -544,14 +609,15 @@ def bind_button_font(button):
     full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), font_path)
 
     try:
-        button.font = pygame.font.Font(full_path, button.font_size)
+        component.font = pygame.font.Font(full_path, component.font_size)
     except (pygame.error, OSError):
-        ### fall back to the default font Button already set up
+        ### fall back to the default font the component already set up
         pass
 
 def make_game(win):
-    ### create one Button for every BUTTON entry in Global.states
+    ### create one Button and one Text for every entry of Global
     buttons = []
+    texts = []
 
     for state, entries in Global.states.items():
         for entry in entries or []:
@@ -559,10 +625,16 @@ def make_game(win):
             action_path = entry[1] if len(entry) > 1 else None
             button = parse_button_entry(button_entry, state)
             button.action_path = action_path
-            bind_button_font(button)
+            bind_component_font(button)
             buttons.append(button)
 
-    return Game(win, buttons)
+    for state, entries in (getattr(Global, 'texts', {}) or {}).items():
+        for text_entry in entries or []:
+            text = parse_text_entry(text_entry, state)
+            bind_component_font(text)
+            texts.append(text)
+
+    return Game(win, buttons, texts)
 
 def app():
     win = initialization()
@@ -577,13 +649,21 @@ def app():
                 pygame.quit()
                 sys.exit(0)
 
+        ### Global.current_state is the source of truth, set_state() in
+        ### Global switches it and the loop picks it up here
+        state = Global.current_state
+        game.current_state = state
+
         for button in game.buttons.values():
-            button.handle_events(events, game.current_state)
+            button.handle_events(events, state)
 
         win.fill(Global.background)
 
+        for text in game.texts:
+            text.render(win, state)
+
         for button in game.buttons.values():
-            button.render(win, game.current_state)
+            button.render(win, state)
 
         pygame.display.update()
 
@@ -607,6 +687,9 @@ if __name__ == "__main__":
     with open('button.py', 'r') as buttonFile, open(projectPath+f'/button.py', 'w') as file:
         file.write(buttonFile.read())
 
+    with open('text.py', 'r') as textFile, open(projectPath+f'/text.py', 'w') as file:
+        file.write(textFile.read())
+
     with open(projectPath+f'/{projectName}Assets/Global.json', 'w') as globalFile:
             globalFile.write('''
 {
@@ -617,6 +700,10 @@ if __name__ == "__main__":
     "background":[255,255,255],
 
     "fonts": {},
+
+    "texts": {
+        "main": []
+    },
 
     "states": {
         "main": []
@@ -636,24 +723,34 @@ def get_json(index, path="{projectName}Assets/Global.json"):
     return data[index]
 
 def set_state(value):
-    global states
-    with open("{projectName}Assets/Global.json","r") as r_file:
-        data = json,load(r_file)
-        data["states"] = value
-    with open("{projectName}Assets/Global.json","w") as w_file:
-        json.dump(data,w_file)
-    states = value
+    ### switch the game to another state at runtime, the running game
+    ### picks up the new state on the next frame
+    global current_state
+
+    if value not in states:
+        print('set_state: unknown state "' + str(value) + '", available states: ' + str(list(states)))
+        return
+
+    current_state = value
 
 fullscreen = get_json("fullscreen")
 base_window_size = get_json("base.window.size")
 fps = get_json("fps")
 title = get_json("title")
 background = get_json("background")
-states = get_json("states")
+try:
+    states = get_json("states")
+except KeyError:
+    states = {{}}
+current_state = next(iter(states), 'main')
 try:
     fonts = get_json("fonts")
 except KeyError:
     fonts = {{}}
+try:
+    texts = get_json("texts")
+except KeyError:
+    texts = {{}}
 
  ''')
 
@@ -975,21 +1072,217 @@ def pick_background_color(app):
 def add_state(app):
     ### Adding new state in 'Global.json' file for every project
 
-    try:
-        state_value = simpledialog.askstring('Add new state','Enter state value :', parent=app)
-        global_project_data = load_global_json(app.current_project)
-        
-        for states in global_project_data['states']:
-            if states.lower().strip() == state_value.lower().strip():
-                tk_alert.showerror('Error',f'State "{state_value}" is already exist.')
-                return
-        
-        global_project_data['states'][state_value] = []
+    project_name = getattr(app, 'current_project', None)
 
-        write_global_json(app.current_project, global_project_data)
-        tk_alert.showinfo('Success','Successfully added new state!')
-    except:
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    state_value = simpledialog.askstring(
+        'Add new state',
+        'Enter state value :',
+        parent=app
+    )
+
+    if state_value is None:
+        return
+
+    state_value = state_value.strip()
+
+    if not state_value:
+        tk_alert.showerror('Error', 'State value cannot be empty.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    states = data.setdefault('states', {})
+
+    if any(name.casefold() == state_value.casefold() for name in states):
+        tk_alert.showerror('Error', f'State "{state_value}" is already exist.')
+        return
+
+    states[state_value] = []
+    write_global_json(project_name, data)
+    tk_alert.showinfo('Success', f'State "{state_value}" added.')
+
+
+def edit_state(app):
+    ### Edit State button of the InProject page
+    ### lets the user pick an existing state and rename it; the buttons
+    ### and texts of the state follow the rename
+
+    _open_state_picker(app, 'Edit State', on_picked=lambda name: _begin_state_rename(app, name))
+
+
+def _begin_state_rename(app, old_name):
+    project_name = app.current_project
+
+    new_name = simpledialog.askstring(
+        'Edit State',
+        f'Enter the new name for state "{old_name}":',
+        parent=app,
+        initialvalue=old_name,
+    )
+
+    if new_name is None:
+        return
+
+    new_name = new_name.strip()
+
+    if not new_name:
+        tk_alert.showerror('Error', 'State value cannot be empty.')
+        return
+
+    if new_name == old_name:
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    states = data.get('states') or {}
+
+    if old_name not in states:
+        tk_alert.showerror('Error', f'State "{old_name}" no longer exists in Global.json.')
+        return
+
+    if any(name.casefold() == new_name.casefold() for name in states):
+        tk_alert.showerror('Error', f'State "{new_name}" already exists in the project.')
+        return
+
+    states[new_name] = states.pop(old_name)
+
+    texts = data.get('texts')
+
+    if isinstance(texts, dict) and old_name in texts:
+        texts[new_name] = texts.pop(old_name)
+
+    write_global_json(project_name, data)
+    tk_alert.showinfo('Success', f'State "{old_name}" renamed to "{new_name}".')
+
+
+def remove_state(app):
+    ### Remove State button of the InProject page
+    ### lets the user pick a state, then removes it from Global.json
+    ### when it holds no buttons or texts
+
+    _open_state_picker(app, 'Remove State', on_picked=lambda name: _confirm_state_removal(app, name))
+
+
+def _confirm_state_removal(app, state_name):
+    project_name = app.current_project
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    button_count = len((data.get('states') or {}).get(state_name) or [])
+    text_count = len((data.get('texts') or {}).get(state_name) or [])
+
+    if button_count or text_count:
+        tk_alert.showerror(
+            'Error',
+            f'State "{state_name}" still has {button_count} button(s) and '
+            f'{text_count} text(s). Remove them first.'
+        )
+        return
+
+    if not tk_alert.askyesno(
+        'Remove State',
+        f'Remove state "{state_name}"?'
+    ):
+        return
+
+    states = data.get('states') or {}
+
+    if state_name not in states:
+        tk_alert.showerror('Error', f'State "{state_name}" no longer exists in Global.json.')
+        return
+
+    del states[state_name]
+    data['states'] = states
+
+    texts = data.get('texts')
+
+    if isinstance(texts, dict):
+        texts.pop(state_name, None)
+        data['texts'] = texts
+
+    write_global_json(project_name, data)
+    tk_alert.showinfo('Removed', f'State "{state_name}" removed.')
+
+
+def _open_state_picker(app, title, on_picked):
+    ### list the states of the open project and let the user pick one;
+    ### on_picked is called with the picked state name
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    names = list((data.get('states') or {}).keys())
+
+    if not names:
+        tk_alert.showinfo('Info', f'There are no states in "{project_name}" yet.')
+        return
+
+    picker = tk.Toplevel(app)
+    picker.title(title)
+    picker.transient(app)
+    picker.resizable(False, False)
+
+    try:
+        picker.grab_set()
+    except tk.TclError:
         pass
+
+    listbox = tk.Listbox(
+        picker,
+        height=min(12, max(4, len(names))),
+        width=32,
+        selectborderwidth=2
+    )
+
+    for name in names:
+        listbox.insert(tk.END, name)
+
+    if len(names) == 1:
+        listbox.selection_set(0)
+
+    listbox.pack(padx=10, pady=(10, 4))
+
+    def pick():
+        selection = listbox.curselection()
+
+        if not selection:
+            tk_alert.showerror('Error', 'Select a state first.')
+            return
+
+        picker.destroy()
+        on_picked(names[selection[0]])
+
+    select = tk.Button(picker, text='Select', command=pick, width=10)
+    select.pack(pady=4)
+
+    cancel = tk.Button(picker, text='Cancel', command=picker.destroy, width=10)
+    cancel.pack(pady=(0, 10))
+
 
 def show_all_states(app):
     ### Show all states from project 'Global.json' file
@@ -1212,6 +1505,266 @@ def _open_font_picker(app, on_picked):
 
     cancel = tk.Button(picker, text='Cancel', command=picker.destroy, width=10)
     cancel.pack(pady=(0, 10))
+
+
+def add_text(app):
+    ### Add Text button of the InProject page
+    ### opens a window to configure a new text label, then stores it in
+    ### the chosen state of the project Global.json
+
+    global _edit_text_entry
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    ### configuring a new text, drop any edit that was in progress
+    _edit_text_entry = None
+
+    render_gui.close_component_window('AddText')
+
+    window = render_gui.open_component_window(
+        'AddText',
+        title=f'Add Text : {project_name}',
+        geometry='420x420',
+        text_font=[
+            ('00', 20),
+            ('61', 12),
+            ('63', 12),
+            ('65', 12),
+            ('67', 12),
+            ('69', 12),
+            ('71', 12),
+        ],
+    )
+    window.transient(app)
+
+    def fill(entry_id, value):
+        entry = render_gui.getInput('AddText', entry_id)
+        entry.delete(0, tk.END)
+        entry.insert(0, value)
+
+    fill('60', next(iter(data.get('states') or {'main': []}), 'main'))
+    fill('62', 'text')
+    fill('64', 'base_font')
+    fill('66', '32')
+    fill('68', '0,0,0')
+    fill('70', '0.5,0.2')
+
+
+def edit_text(app):
+    ### Edit Text button of the InProject page
+    ### lets the user pick an existing text and pre-fills the
+    ### AddText window with its fields; saving then replaces the entry
+
+    global _edit_text_entry
+
+    _edit_text_entry = None
+
+    _open_text_picker(app, 'Edit Text', on_picked=lambda picked: _begin_text_edit(app, picked))
+
+
+def _begin_text_edit(app, picked):
+    ### picker callback of edit_text: remember the picked entry and open
+    ### the AddText window pre-filled with the text's fields
+
+    global _edit_text_entry
+
+    state, index, entry_string, fields = picked
+
+    _edit_text_entry = (state, index, entry_string)
+
+    project_name = app.current_project
+
+    render_gui.close_component_window('AddText')
+
+    window = render_gui.open_component_window(
+        'AddText',
+        title=f'Edit Text : {project_name}',
+        geometry='420x420',
+        text_font=[
+            ('00', 20),
+            ('61', 12),
+            ('63', 12),
+            ('65', 12),
+            ('67', 12),
+            ('69', 12),
+            ('71', 12),
+        ],
+    )
+    window.transient(app)
+
+    def fill(entry_id, value):
+        entry = render_gui.getInput('AddText', entry_id)
+        entry.delete(0, tk.END)
+        entry.insert(0, value)
+
+    fill('60', state)
+    fill('62', fields.get('text') or '')
+    fill('64', fields.get('font_name') or 'base_font')
+    fill('66', fields.get('font_size') or '32')
+    fill('68', _strip_brackets(fields.get('text_color') or '0,0,0'))
+    fill('70', _strip_brackets(fields.get('pos') or '0.5,0.2'))
+
+
+def remove_text(app):
+    ### Remove Text button of the InProject page
+    ### lets the user pick an existing text, then removes its entry
+    ### from Global.json
+
+    _open_text_picker(app, 'Remove Text', on_picked=lambda picked: _confirm_text_removal(app, picked))
+
+
+def _confirm_text_removal(app, picked):
+    state, index, entry_string, fields = picked
+    project_name = app.current_project
+    text = fields.get('text') or ''
+
+    if not tk_alert.askyesno(
+        'Remove Text',
+        f'Remove text "{text}" from state "{state}"?'
+    ):
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    entries = (data.get('texts') or {}).get(state) or []
+
+    if not (index < len(entries) and entries[index] == entry_string):
+        tk_alert.showerror(
+            'Error',
+            'That text no longer exists in Global.json. It may have been changed.'
+        )
+        return
+
+    del entries[index]
+    write_global_json(project_name, data)
+    tk_alert.showinfo('Removed', f'Text "{text}" removed from state "{state}".')
+
+
+def save_text_configure(app):
+    ### Save button of the AddText window
+    ### writes the configured text into the chosen state of Global.json,
+    ### replacing the picked entry when a text is being edited
+
+    global _edit_text_entry
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    state = _read_text_field(app, '60')
+
+    if state is None:
+        tk_alert.showerror('Error', 'Text configure window is not open.')
+        return
+
+    if not state:
+        tk_alert.showerror('Error', 'State cannot be empty.')
+        return
+
+    if state not in data.get('states', {}):
+        tk_alert.showerror(
+            'Error',
+            f'State "{state}" does not exist. Add it first with "Add State".'
+        )
+        return
+
+    text = _read_text_field(app, '62')
+
+    if not text:
+        tk_alert.showerror('Error', 'Text cannot be empty.')
+        return
+
+    font_name = _read_text_field(app, '64')
+
+    if not font_name:
+        tk_alert.showerror('Error', 'Font name cannot be empty.')
+        font_name = None
+
+    if font_name and font_name != 'base_font' and font_name not in (data.get('fonts') or {}):
+        tk_alert.showerror(
+            'Error',
+            f'Font "{font_name}" does not exist in {project_name}. Add it first with "Add Font".'
+        )
+        font_name = None
+
+    font_size = _read_int_field(app, '66', 'Font size', window='AddText')
+    text_color = _read_rgb_field(app, '68', 'Text color', window='AddText')
+    position = _read_pair_field(app, '70', 'Position', window='AddText')
+
+    if (
+        font_name is None
+        or font_size is None
+        or text_color is None
+        or position is None
+    ):
+        return
+
+    text_entry = 'TEXT(' + ','.join([
+        f'text={text}',
+        f'pos={_format_values(position)}',
+        f'font_name={font_name}',
+        f'font_size={font_size}',
+        f'text_color={_format_values(text_color)}',
+    ]) + ')'
+
+    was_editing = _edit_text_entry is not None
+
+    texts = data.setdefault('texts', {})
+    target = texts.setdefault(state, [])
+
+    if was_editing:
+        edit_state, edit_index, old_entry = _edit_text_entry
+
+        if state == edit_state:
+            ### keep the text's place in the state's list
+            if edit_index < len(target):
+                target[edit_index] = text_entry
+            else:
+                target.append(text_entry)
+        else:
+            ### the text moved to another state, drop the old entry
+            ### and append to the new state
+            _remove_text_entry_from_data(data, _edit_text_entry)
+            target.append(text_entry)
+    else:
+        target.append(text_entry)
+
+    write_global_json(project_name, data)
+    _edit_text_entry = None
+
+    tk_alert.showinfo(
+        'Saved',
+        f'Text "{text}" updated in state "{state}".'
+        if was_editing
+        else f'Text "{text}" added to state "{state}".',
+    )
+
+
+def close_text_configure_window(app):
+    ### Close button of the AddText window
+    render_gui.close_component_window('AddText')
 
 
 def add_button(app):
@@ -1693,8 +2246,22 @@ def _read_button_field(app, entry_id):
         return None
 
 
-def _read_int_field(app, entry_id, label, minimum=1, maximum=4096):
-    raw = _read_button_field(app, entry_id)
+def _read_text_field(app, entry_id):
+    try:
+        return render_gui.getInput('AddText', entry_id).get().strip()
+    except (KeyError, RuntimeError):
+        return None
+
+
+def _read_field(window, entry_id):
+    try:
+        return render_gui.getInput(window, entry_id).get().strip()
+    except (KeyError, RuntimeError):
+        return None
+
+
+def _read_int_field(app, entry_id, label, minimum=1, maximum=4096, window='AddButton'):
+    raw = _read_field(window, entry_id)
 
     if raw is None:
         return None
@@ -1716,8 +2283,8 @@ def _read_int_field(app, entry_id, label, minimum=1, maximum=4096):
     return value
 
 
-def _read_rgb_field(app, entry_id, label):
-    raw = _read_button_field(app, entry_id)
+def _read_rgb_field(app, entry_id, label, window='AddButton'):
+    raw = _read_field(window, entry_id)
 
     if raw is None:
         return None
@@ -1741,8 +2308,8 @@ def _read_rgb_field(app, entry_id, label):
     return values
 
 
-def _read_pair_field(app, entry_id, label, integer=False, minimum=None):
-    raw = _read_button_field(app, entry_id)
+def _read_pair_field(app, entry_id, label, integer=False, minimum=None, window='AddButton'):
+    raw = _read_field(window, entry_id)
 
     if raw is None:
         return None
@@ -1802,11 +2369,15 @@ def _split_top_level(text):
 
 
 def _parse_button_fields(entry_string):
-    ### extract the key/value pairs of a BUTTON(...) entry string
-    if not isinstance(entry_string, str) or not entry_string.startswith('BUTTON('):
+    ### extract the key/value pairs of a component entry string, either
+    ### BUTTON(key=value,...) or TEXT(key=value,...)
+    if not isinstance(entry_string, str):
         return {}
 
-    body = entry_string[len('BUTTON('):-1]
+    if not entry_string.startswith(('BUTTON(', 'TEXT(')):
+        return {}
+
+    body = entry_string[entry_string.index('(') + 1:-1]
     fields = {}
 
     for part in _split_top_level(body):
@@ -1838,6 +2409,38 @@ def _collect_button_entries(project_name):
             ))
 
     return buttons
+
+
+def _collect_text_entries(project_name):
+    ### every text entry of the project as
+    ### (state, index, entry_string, fields) tuples
+    data = load_global_json(project_name)
+    texts = []
+
+    for state, entries in (data.get('texts') or {}).items():
+        for index, entry in enumerate(entries or []):
+            if not isinstance(entry, str) or not entry.startswith('TEXT('):
+                continue
+
+            texts.append((
+                state,
+                index,
+                entry,
+                _parse_button_fields(entry),
+            ))
+
+    return texts
+
+
+def _remove_text_entry_from_data(data, entry_ref):
+    ### drop the picked text entry from in-memory Global.json data so the
+    ### following append replaces it instead of duplicating it
+
+    state, index, old_entry = entry_ref
+    entries = (data.get('texts') or {}).get(state) or []
+
+    if index < len(entries) and entries[index] == old_entry:
+        del entries[index]
 
 
 def _open_button_picker(app, title, on_picked):
@@ -1893,6 +2496,67 @@ def _open_button_picker(app, title, on_picked):
 
         picker.destroy()
         on_picked(buttons[selection[0]])
+
+    select = tk.Button(picker, text='Select', command=pick, width=10)
+    select.pack(pady=4)
+
+    cancel = tk.Button(picker, text='Cancel', command=picker.destroy, width=10)
+    cancel.pack(pady=(0, 10))
+
+
+def _open_text_picker(app, title, on_picked):
+    ### list every text of the open project and let the user pick one;
+    ### on_picked is called with the picked (state, index, entry, fields) tuple
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        texts = _collect_text_entries(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    if not texts:
+        tk_alert.showinfo('Info', f'There are no texts in "{project_name}" yet.')
+        return
+
+    picker = tk.Toplevel(app)
+    picker.title(title)
+    picker.transient(app)
+    picker.resizable(False, False)
+
+    try:
+        picker.grab_set()
+    except tk.TclError:
+        pass
+
+    listbox = tk.Listbox(
+        picker,
+        height=min(12, max(4, len(texts))),
+        width=48,
+        selectborderwidth=2
+    )
+
+    for state, index, _, fields in texts:
+        listbox.insert(tk.END, f'{state} : {fields.get("text", "")}')
+
+    if len(texts) == 1:
+        listbox.selection_set(0)
+
+    listbox.pack(padx=10, pady=(10, 4))
+
+    def pick():
+        selection = listbox.curselection()
+
+        if not selection:
+            tk_alert.showerror('Error', 'Select a text first.')
+            return
+
+        picker.destroy()
+        on_picked(texts[selection[0]])
 
     select = tk.Button(picker, text='Select', command=pick, width=10)
     select.pack(pady=4)
