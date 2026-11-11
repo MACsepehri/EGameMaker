@@ -1,0 +1,30 @@
+{
+    "fullscreen": false,
+    "base.window.size": [
+        500,
+        500
+    ],
+    "fps": 60,
+    "title": "test",
+    "background": [
+        255,
+        255,
+        255
+    ],
+    "fonts": {},
+    "texts": {
+        "main": []
+    },
+    "states": {
+        "main": []
+    },
+    "images": {
+        "test": "testAssets/Images/test.png",
+        "adwawd": "testAssets/Images/adwawd.png",
+        "awdawd": "testAssets/Images/awdawd.png",
+        "adwada": "testAssets/Images/adwada.png"
+    },
+    "image_components": {
+        "main": []
+    }
+}

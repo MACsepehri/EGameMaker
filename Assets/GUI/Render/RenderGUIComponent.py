@@ -239,6 +239,11 @@ class RenderGUIComponent:
 
         window = tk.Toplevel(self._app)
 
+        ### attach the window to the main app window right away so window
+        ### managers don't list it as a new task and don't raise the main
+        ### window again when the component is closed and re-opened
+        window.transient(self._app)
+
         if title:
             window.title(title)
 
@@ -252,6 +257,16 @@ class RenderGUIComponent:
         self.renderButton(component_file, window)
 
         self.windows[component_file] = window
+
+        ### make sure the window opens on top of the main window with focus
+        try:
+            window.update_idletasks()
+            window.lift()
+            window.attributes('-topmost', True)
+            window.attributes('-topmost', False)
+            window.focus_force()
+        except tk.TclError:
+            pass
 
         return window
 

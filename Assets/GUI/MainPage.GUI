@@ -1,6 +1,3 @@
 TEXT=(Welcome to EGameMaker!,(0.02,0.05),01)
 BUTTON=(Create,(0.02,0.25),03,MainPage/03.pkl)
 BUTTON=(test,(0.02,0.35),test,MainPage/test.pkl)
-BUTTON=(mygame,(0.02,0.56),mygame,MainPage/mygame.pkl)
-BUTTON=(dwwad,(0.02,0.49),dwwad,MainPage/dwwad.pkl)
-BUTTON=(errtest,(0.02,0.42),errtest,MainPage/errtest.pkl)

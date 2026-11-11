@@ -30,6 +30,10 @@ _edit_button_entry = None
 ### currently being edited; None means a new text is being configured
 _edit_text_entry = None
 
+### (state, index, entry_string) of the Global.json image entry that is
+### currently being edited; None means a new image is being configured
+_edit_image_entry = None
+
 
 class EGameMaker(tk.Tk):
     ### main class of GUI
@@ -51,6 +55,7 @@ class EGameMaker(tk.Tk):
         self.create_button_configure_action()
         self.create_button_action_action()
         self.create_text_configure_action()
+        self.create_image_configure_action()
 
         projects = os.listdir('Projects')
         if len(projects) < 1:
@@ -185,6 +190,21 @@ class EGameMaker(tk.Tk):
             with open(path, 'wb') as file:
                 pickle.dump(func, file)
 
+    def create_image_configure_action(self):
+        # add pkl object funcs used by the AddImage window buttons
+        actions = {
+            '110': save_image_configure,
+            '111': close_image_configure_window,
+        }
+
+        for action_id, func in actions.items():
+            path = f'Assets/Action/AddImage/{action_id}.pkl'
+
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+
+            with open(path, 'wb') as file:
+                pickle.dump(func, file)
+
     def move_run_button_to_bottom(self):
         # pin the InProject "Run" button near the bottom edge.
         # the .GUI renderer places by rely (0..1 fraction of window height),
@@ -306,6 +326,9 @@ class OpenProjectAction:
         self.save_pickle_object('017',remove_text)
         self.save_pickle_object('018',edit_state)
         self.save_pickle_object('019',remove_state)
+        self.save_pickle_object('020',add_image)
+        self.save_pickle_object('021',remove_image)
+        self.save_pickle_object('022',edit_image)
 
 
     def __call__(self, app):
@@ -432,6 +455,7 @@ import os
 import __PROJECT_NAME__Assets.Global as Global
 from button import Button
 from text import Text
+from image import Image
 
 pygame.init()
 
@@ -539,15 +563,47 @@ def parse_text_entry(entry, state_in):
         state_in=state_in,
     )
 
+def parse_image_entry(entry, state_in):
+    ### turn an IMAGE(...) entry of Global.image_components into an Image
+    body = entry[len('IMAGE('):-1]
+    values = {}
+
+    for part in split_top_level(body):
+        key, _, value = part.partition('=')
+        values[key.strip()] = value.strip()
+
+    def items(raw):
+        ### values are stored like [a,b,c]; strip one pair of [ ] then
+        ### split on the top-level commas
+        raw = raw.strip()
+
+        if raw.startswith('[') and raw.endswith(']'):
+            raw = raw[1:-1]
+
+        return [item for item in split_top_level(raw) if item != '']
+
+    def pair(key, cast):
+        raw = values.get(key, '')
+        return [cast(item) for item in items(raw)] if raw else None
+
+    return Image(
+        image_name=values.get('image', ''),
+        position=pair('pos', float) or (0.5, 0.5),
+        size=tuple(int(item) for item in items(values.get('size', ''))) or (200, 200),
+        border_radius=int(values.get('border_radius', '0') or 0),
+        state_in=state_in,
+    )
+
 class Game:
     ### the object passed to the user's action code as self, it carries
     ### the button vars and the Global vars
 
-    def __init__(self, win, buttons, texts):
+    def __init__(self, win, buttons, texts, images):
         self.win = win
         self.Global = Global
         self.buttons = {button.text: button for button in buttons}
         self.texts = texts
+        self.images = images
         self.current_state = getattr(
             Global, 'current_state', next(iter(Global.states), 'main')
         )
@@ -614,8 +670,22 @@ def bind_component_font(component):
         ### fall back to the default font the component already set up
         pass
 
+def bind_image(component):
+    ### resolve an image component's registered name to its file and
+    ### load it, names come from the images map of Global.json
+    if not component.image_name:
+        return
+
+    image_path = (getattr(Global, 'images', {}) or {}).get(component.image_name)
+
+    if not image_path:
+        return
+
+    full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), image_path)
+    component.set_image(full_path)
+
 def make_game(win):
-    ### create one Button and one Text for every entry of Global
+    ### create one Button, Text and Image for every entry of Global
     buttons = []
     texts = []
 
@@ -634,7 +704,15 @@ def make_game(win):
             bind_component_font(text)
             texts.append(text)
 
-    return Game(win, buttons, texts)
+    images = []
+
+    for state, entries in (getattr(Global, 'image_components', {}) or {}).items():
+        for image_entry in entries or []:
+            image = parse_image_entry(image_entry, state)
+            bind_image(image)
+            images.append(image)
+
+    return Game(win, buttons, texts, images)
 
 def app():
     win = initialization()
@@ -658,6 +736,9 @@ def app():
             button.handle_events(events, state)
 
         win.fill(Global.background)
+
+        for image in game.images:
+            image.render(win, state)
 
         for text in game.texts:
             text.render(win, state)
@@ -690,6 +771,9 @@ if __name__ == "__main__":
     with open('text.py', 'r') as textFile, open(projectPath+f'/text.py', 'w') as file:
         file.write(textFile.read())
 
+    with open('image.py', 'r') as imageFile, open(projectPath+f'/image.py', 'w') as file:
+        file.write(imageFile.read())
+
     with open(projectPath+f'/{projectName}Assets/Global.json', 'w') as globalFile:
             globalFile.write('''
 {
@@ -700,6 +784,10 @@ if __name__ == "__main__":
     "background":[255,255,255],
 
     "fonts": {},
+
+    "images": {},
+
+    "image_components": {},
 
     "texts": {
         "main": []
@@ -751,6 +839,14 @@ try:
     texts = get_json("texts")
 except KeyError:
     texts = {{}}
+try:
+    images = get_json("images")
+except KeyError:
+    images = {{}}
+try:
+    image_components = get_json("image_components")
+except KeyError:
+    image_components = {{}}
 
  ''')
 
@@ -1252,6 +1348,13 @@ def _open_state_picker(app, title, on_picked):
     except tk.TclError:
         pass
 
+    ### make sure the picker opens on top of the main window with focus
+    try:
+        picker.update_idletasks()
+        picker.lift()
+    except tk.TclError:
+        pass
+
     listbox = tk.Listbox(
         picker,
         height=min(12, max(4, len(names))),
@@ -1475,6 +1578,13 @@ def _open_font_picker(app, on_picked):
     except tk.TclError:
         pass
 
+    ### make sure the picker opens on top of the main window with focus
+    try:
+        picker.update_idletasks()
+        picker.lift()
+    except tk.TclError:
+        pass
+
     listbox = tk.Listbox(
         picker,
         height=min(12, max(4, len(names))),
@@ -1499,6 +1609,445 @@ def _open_font_picker(app, on_picked):
 
         picker.destroy()
         on_picked(names[selection[0]])
+
+    select = tk.Button(picker, text='Select', command=pick, width=10)
+    select.pack(pady=4)
+
+    cancel = tk.Button(picker, text='Cancel', command=picker.destroy, width=10)
+    cancel.pack(pady=(0, 10))
+
+
+def add_image(app):
+    ### Add Image button of the InProject page
+    ### gives an image file a name, copies it into the project assets and
+    ### registers it in Global.json, then opens the AddImage window so the
+    ### image's placement (state, position, size, corner radius) is set
+
+    global _edit_image_entry
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    ### placing a new image, drop any edit that was in progress
+    _edit_image_entry = None
+
+    images = data.get('images') or {}
+    image_name = _ask_image_name(app, images)
+
+    if image_name is None:
+        return
+
+    image_file = tk.filedialog.askopenfilename(
+        parent=app,
+        title='Select the image file',
+        filetypes=[
+            ('Image files', '*.png;*.jpg;*.jpeg;*.gif;*.bmp;*.webp'),
+            ('All files', '*.*'),
+        ],
+    )
+
+    if not image_file:
+        return
+
+    extension = os.path.splitext(image_file)[1]
+    folder = f'Projects/{project_name}/{project_name}Assets/Images'
+    os.makedirs(folder, exist_ok=True)
+
+    shutil.copy2(image_file, os.path.join(folder, image_name + extension))
+
+    images[image_name] = f'{project_name}Assets/Images/{image_name}{extension}'
+    data['images'] = images
+    write_global_json(project_name, data)
+
+    ### open the configure window with the new image pre-filled
+    _open_image_configure_window(app, f'Add Image : {project_name}', {
+        '90': next(iter(data.get('states') or {'main': []}), 'main'),
+        '92': image_name,
+        '94': '0.5,0.5',
+        '96': '200',
+        '98': '200',
+        '100': '0',
+    })
+
+
+def _ask_image_name(app, images):
+    ### ask for an image name that is not empty, filesystem safe and not
+    ### already used in the project; None means the user cancelled
+
+    while True:
+        raw = simpledialog.askstring(
+            'Add Image',
+            'Enter a name for the image:',
+            parent=app
+        )
+
+        if raw is None:
+            return None
+
+        image_name = raw.strip()
+
+        if not image_name:
+            tk_alert.showerror('Error', 'Image name cannot be empty.')
+            continue
+
+        if any(char in image_name for char in '\\/:*?"<>|'):
+            tk_alert.showerror('Error', 'Image name contains invalid characters.')
+            continue
+
+        if any(image_name.casefold() == name.casefold() for name in images):
+            tk_alert.showerror('Error', f'Image "{image_name}" already exists in the project.')
+            continue
+
+        return image_name
+
+
+def edit_image(app):
+    ### Edit Image button of the InProject page
+    ### lets the user pick a placed image and re-open the AddImage window
+    ### with its values so they can be changed
+
+    global _edit_image_entry
+
+    _edit_image_entry = None
+
+    _open_image_picker(app, 'Edit Image', on_picked=lambda picked: _begin_image_edit(app, picked))
+
+
+def _begin_image_edit(app, picked):
+    ### picker callback of edit_image: remember the picked entry and open
+    ### the AddImage window pre-filled with the image's values
+
+    global _edit_image_entry
+
+    state, index, entry_string, fields = picked
+
+    _edit_image_entry = (state, index, entry_string)
+
+    size_raw = _strip_brackets(fields.get('size') or '200,200')
+    size_parts = size_raw.split(',')
+    width_value = size_parts[0] if len(size_parts) > 0 else '200'
+    height_value = size_parts[1] if len(size_parts) > 1 else '200'
+
+    _open_image_configure_window(app, f'Edit Image : {app.current_project}', {
+        '90': state,
+        '92': fields.get('image') or '',
+        '94': _strip_brackets(fields.get('pos') or '0.5,0.5'),
+        '96': width_value,
+        '98': height_value,
+        '100': fields.get('border_radius') or '0',
+    })
+
+
+def remove_image(app):
+    ### Remove Image button of the InProject page
+    ### lets the user pick a placed image, removes its entry from
+    ### Global.json and the image file when no other image uses it
+
+    _open_image_picker(app, 'Remove Image', on_picked=lambda picked: _confirm_image_removal(app, picked))
+
+
+def _confirm_image_removal(app, picked):
+    state, index, entry_string, fields = picked
+    project_name = app.current_project
+    image_name = fields.get('image') or ''
+
+    if not tk_alert.askyesno(
+        'Remove Image',
+        f'Remove image "{image_name}" from state "{state}"?'
+    ):
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    entries = (data.get('image_components') or {}).get(state) or []
+
+    if not (index < len(entries) and entries[index] == entry_string):
+        tk_alert.showerror(
+            'Error',
+            'That image no longer exists in Global.json. It may have been changed.'
+        )
+        return
+
+    del entries[index]
+
+    ### delete the image file when no remaining placed image uses it
+    if image_name:
+        still_used = any(
+            _parse_button_fields(other).get('image') == image_name
+            for other_entries in (data.get('image_components') or {}).values()
+            for other in (other_entries or [])
+            if isinstance(other, str)
+        )
+
+        if not still_used:
+            images = data.get('images') or {}
+
+            if image_name in images:
+                image_path = images[image_name]
+                del images[image_name]
+                data['images'] = images
+                write_global_json(project_name, data)
+
+                full_path = os.path.join('Projects', project_name, image_path)
+
+                if os.path.isfile(full_path):
+                    os.remove(full_path)
+
+    write_global_json(project_name, data)
+    tk_alert.showinfo('Removed', f'Image "{image_name}" removed from state "{state}".')
+
+
+def save_image_configure(app):
+    ### Save button of the AddImage window
+    ### writes the configured image into the chosen state of Global.json,
+    ### replacing the picked entry when an image is being edited
+
+    global _edit_image_entry
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    state = _read_field('AddImage', '90')
+
+    if state is None:
+        tk_alert.showerror('Error', 'Image configure window is not open.')
+        return
+
+    if not state:
+        tk_alert.showerror('Error', 'State cannot be empty.')
+        return
+
+    if state not in data.get('states', {}):
+        tk_alert.showerror(
+            'Error',
+            f'State "{state}" does not exist. Add it first with "Add State".'
+        )
+        return
+
+    image_name = _read_field('AddImage', '92')
+
+    if not image_name:
+        tk_alert.showerror('Error', 'Image name cannot be empty.')
+        image_name = None
+
+    if image_name and image_name not in (data.get('images') or {}):
+        tk_alert.showerror(
+            'Error',
+            f'Image "{image_name}" does not exist in {project_name}. Add it first with "Add Image".'
+        )
+        image_name = None
+
+    position = _read_pair_field(app, '94', 'Position', window='AddImage')
+    width = _read_int_field(app, '96', 'Width', window='AddImage')
+    height = _read_int_field(app, '98', 'Height', window='AddImage')
+    border_radius = _read_int_field(app, '100', 'Border radius', minimum=0, window='AddImage')
+
+    if (
+        image_name is None
+        or position is None
+        or width is None
+        or height is None
+        or border_radius is None
+    ):
+        return
+
+    image_entry = 'IMAGE(' + ','.join([
+        f'image={image_name}',
+        f'pos={_format_values(position)}',
+        f'size={_format_values([width, height])}',
+        f'border_radius={border_radius}',
+    ]) + ')'
+
+    was_editing = _edit_image_entry is not None
+
+    components = data.setdefault('image_components', {})
+    target = components.setdefault(state, [])
+
+    if was_editing:
+        edit_state, edit_index, old_entry = _edit_image_entry
+
+        if state == edit_state:
+            ### keep the image's place in the state's list
+            if edit_index < len(target):
+                target[edit_index] = image_entry
+            else:
+                target.append(image_entry)
+        else:
+            ### the image moved to another state, drop the old entry
+            ### and append to the new state
+            _remove_image_entry_from_data(data, _edit_image_entry)
+            target.append(image_entry)
+    else:
+        target.append(image_entry)
+
+    write_global_json(project_name, data)
+    _edit_image_entry = None
+
+    tk_alert.showinfo(
+        'Saved',
+        f'Image "{image_name}" updated in state "{state}".'
+        if was_editing
+        else f'Image "{image_name}" added to state "{state}".',
+    )
+
+
+def close_image_configure_window(app):
+    ### Close button of the AddImage window
+    render_gui.close_component_window('AddImage')
+
+
+def _open_image_configure_window(app, title, prefill):
+    ### open the AddImage window with the given field values pre-filled
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    render_gui.close_component_window('AddImage')
+
+    window = render_gui.open_component_window(
+        'AddImage',
+        title=title,
+        geometry='420x440',
+        text_font=[
+            ('00', 20),
+            ('91', 12),
+            ('93', 12),
+            ('95', 12),
+            ('97', 12),
+            ('99', 12),
+            ('101', 12),
+        ],
+    )
+    window.transient(app)
+
+    def fill(entry_id, value):
+        entry = render_gui.getInput('AddImage', entry_id)
+        entry.delete(0, tk.END)
+        entry.insert(0, str(value))
+
+    for entry_id, value in prefill.items():
+        fill(entry_id, value)
+
+
+def _collect_image_entries(project_name):
+    ### every placed image of the project as
+    ### (state, index, entry_string, fields) tuples
+    data = load_global_json(project_name)
+    images = []
+
+    for state, entries in (data.get('image_components') or {}).items():
+        for index, entry in enumerate(entries or []):
+            if not isinstance(entry, str) or not entry.startswith('IMAGE('):
+                continue
+
+            images.append((
+                state,
+                index,
+                entry,
+                _parse_button_fields(entry),
+            ))
+
+    return images
+
+
+def _remove_image_entry_from_data(data, entry_ref):
+    ### drop the picked image entry from in-memory Global.json data so the
+    ### following append replaces it instead of duplicating it
+
+    state, index, old_entry = entry_ref
+    entries = (data.get('image_components') or {}).get(state) or []
+
+    if index < len(entries) and entries[index] == old_entry:
+        del entries[index]
+
+
+def _open_image_picker(app, title, on_picked):
+    ### list every placed image of the open project and let the user pick
+    ### one; on_picked is called with the picked
+    ### (state, index, entry, fields) tuple
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        images = _collect_image_entries(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    if not images:
+        tk_alert.showinfo('Info', f'There are no images in "{project_name}" yet.')
+        return
+
+    picker = tk.Toplevel(app)
+    picker.title(title)
+    picker.transient(app)
+    picker.resizable(False, False)
+
+    try:
+        picker.grab_set()
+    except tk.TclError:
+        pass
+
+    ### make sure the picker opens on top of the main window with focus
+    try:
+        picker.update_idletasks()
+        picker.lift()
+    except tk.TclError:
+        pass
+
+    listbox = tk.Listbox(
+        picker,
+        height=min(12, max(4, len(images))),
+        width=40,
+        selectborderwidth=2
+    )
+
+    for state, index, _, fields in images:
+        listbox.insert(tk.END, f'{state} : {fields.get("image", "")}')
+
+    if len(images) == 1:
+        listbox.selection_set(0)
+
+    listbox.pack(padx=10, pady=(10, 4))
+
+    def pick():
+        selection = listbox.curselection()
+
+        if not selection:
+            tk_alert.showerror('Error', 'Select an image first.')
+            return
+
+        picker.destroy()
+        on_picked(images[selection[0]])
 
     select = tk.Button(picker, text='Select', command=pick, width=10)
     select.pack(pady=4)
@@ -2370,11 +2919,12 @@ def _split_top_level(text):
 
 def _parse_button_fields(entry_string):
     ### extract the key/value pairs of a component entry string, either
-    ### BUTTON(key=value,...) or TEXT(key=value,...)
+    ### BUTTON(key=value,...), TEXT(key=value,...) or
+    ### IMAGE(key=value,...)
     if not isinstance(entry_string, str):
         return {}
 
-    if not entry_string.startswith(('BUTTON(', 'TEXT(')):
+    if not entry_string.startswith(('BUTTON(', 'TEXT(', 'IMAGE(')):
         return {}
 
     body = entry_string[entry_string.index('(') + 1:-1]
@@ -2472,6 +3022,13 @@ def _open_button_picker(app, title, on_picked):
     except tk.TclError:
         pass
 
+    ### make sure the picker opens on top of the main window with focus
+    try:
+        picker.update_idletasks()
+        picker.lift()
+    except tk.TclError:
+        pass
+
     listbox = tk.Listbox(
         picker,
         height=min(12, max(4, len(buttons))),
@@ -2530,6 +3087,13 @@ def _open_text_picker(app, title, on_picked):
 
     try:
         picker.grab_set()
+    except tk.TclError:
+        pass
+
+    ### make sure the picker opens on top of the main window with focus
+    try:
+        picker.update_idletasks()
+        picker.lift()
     except tk.TclError:
         pass
 
