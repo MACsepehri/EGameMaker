@@ -7,8 +7,8 @@ BUTTON=(Edit Button,(0.071,0.25),011,InProject/011.pkl)
 BUTTON=(Remove Button,(0.121,0.25),012,InProject/012.pkl)
 
 
-BUTTON=(Add Font,(0.02,0.28),002,InProject/03.pkl)
-BUTTON=(Remove Font,(0.063,0.28),002,InProject/03.pkl)
+BUTTON=(Add Font,(0.02,0.28),013,InProject/013.pkl)
+BUTTON=(Remove Font,(0.063,0.28),014,InProject/014.pkl)
 
 
 BUTTON=(Add Text,(0.02,0.31),003,InProject/03.pkl)
@@ -40,4 +40,4 @@ BUTTON=(Show All Directories / Files,(0.02,0.49),009,InProject/009.pkl)
 
 BUTTON=(Remove Project,(0.08,0.9000),0010,InProject/0010.pkl)
 BUTTON=(Run,(0.02,0.9000),03,InProject/03.pkl)
-TEXT=(mygame,(0.02,0.08),01)
+TEXT=(tttt,(0.02,0.08),01)

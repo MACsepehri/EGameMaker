@@ -86,7 +86,10 @@ egm._open_button_picker = fake_picker
 picked = []
 
 real_picker(app, 'Edit Button', on_picked=picked.append)
-pickers = [w for w in app.winfo_children() if isinstance(w, tk.Toplevel)]
+pickers = [
+    w for w in app.winfo_children()
+    if isinstance(w, tk.Toplevel) and w.title() == 'Edit Button'
+]
 assert pickers, 'picker window was not created'
 picker_listboxes = [
     child for child in pickers[0].winfo_children()

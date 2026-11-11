@@ -10,6 +10,7 @@ import pickle
 import shutil
 import tkinter as tk
 import tkinter.colorchooser
+import tkinter.filedialog
 import subprocess as sub
 from tkinter import simpledialog
 from tkinter import messagebox as tk_alert
@@ -278,6 +279,8 @@ class OpenProjectAction:
         self.save_pickle_object('001',add_button)
         self.save_pickle_object('011',edit_button)
         self.save_pickle_object('012',remove_button)
+        self.save_pickle_object('013',add_font)
+        self.save_pickle_object('014',remove_font)
 
 
     def __call__(self, app):
@@ -393,13 +396,14 @@ def save_project(inp):
     ### Saving basics
     with open(projectPath+f'/{projectName}.py', 'w') as file:
         file.write('''
- ### MADE BY EGameMaker GAME ENGINE
- ### OPEN-SOURCE ENGINE
- ### https://github.com/MACsepehri/EGameMaker
+### MADE BY EGameMaker GAME ENGINE
+### OPEN-SOURCE ENGINE
+### https://github.com/MACsepehri/EGameMaker
 
 import pygame,sys
 import types
 import pickle
+import os
 import __PROJECT_NAME__Assets.Global as Global
 from button import Button
 
@@ -526,6 +530,25 @@ def fire_action(action, game):
     else:
         action()
 
+def bind_button_font(button):
+    ### resolve the button's font name to a project font file and rebind
+    ### the button's font, names come from the fonts map of Global.json
+    if not button.font_name or button.font_name == 'base_font':
+        return
+
+    font_path = (getattr(Global, 'fonts', {}) or {}).get(button.font_name)
+
+    if not font_path:
+        return
+
+    full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), font_path)
+
+    try:
+        button.font = pygame.font.Font(full_path, button.font_size)
+    except (pygame.error, OSError):
+        ### fall back to the default font Button already set up
+        pass
+
 def make_game(win):
     ### create one Button for every BUTTON entry in Global.states
     buttons = []
@@ -536,6 +559,7 @@ def make_game(win):
             action_path = entry[1] if len(entry) > 1 else None
             button = parse_button_entry(button_entry, state)
             button.action_path = action_path
+            bind_button_font(button)
             buttons.append(button)
 
     return Game(win, buttons)
@@ -592,6 +616,8 @@ if __name__ == "__main__":
     "title":"'''+projectName+'''",
     "background":[255,255,255],
 
+    "fonts": {},
+
     "states": {
         "main": []
     }
@@ -624,8 +650,12 @@ fps = get_json("fps")
 title = get_json("title")
 background = get_json("background")
 states = get_json("states")
+try:
+    fonts = get_json("fonts")
+except KeyError:
+    fonts = {{}}
 
-''')
+ ''')
 
 def get_directory(app):
     path = simpledialog.askstring("Create directory", "Enter directory path :", parent=app)
@@ -983,6 +1013,207 @@ def show_all_dir_and_files(app):
     
     tk_alert.showinfo('All Assets Directories and Files',f'All directories/files in assets :\n\n{string_result}')
 
+def add_font(app):
+    ### Add Font button of the InProject page
+    ### gives a font file a name, copies it into the project assets and
+    ### registers it in Global.json so components can use it by name
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    fonts = data.get('fonts') or {}
+    font_name = _ask_font_name(app, fonts)
+
+    if font_name is None:
+        return
+
+    font_file = tk.filedialog.askopenfilename(
+        parent=app,
+        title='Select the font file',
+        filetypes=[
+            ('Font files', '*.ttf;*.otf;*.ttc'),
+            ('All files', '*.*'),
+        ],
+    )
+
+    if not font_file:
+        return
+
+    extension = os.path.splitext(font_file)[1]
+    folder = f'Projects/{project_name}/{project_name}Assets/Fonts'
+    os.makedirs(folder, exist_ok=True)
+
+    shutil.copy2(font_file, os.path.join(folder, font_name + extension))
+
+    fonts[font_name] = f'{project_name}Assets/Fonts/{font_name}{extension}'
+    data['fonts'] = fonts
+    write_global_json(project_name, data)
+
+    tk_alert.showinfo('Added', f'Font "{font_name}" added to {project_name}.')
+
+
+def _ask_font_name(app, fonts):
+    ### ask for a font name that is not empty, filesystem safe and not
+    ### already used in the project; None means the user cancelled
+
+    while True:
+        raw = simpledialog.askstring(
+            'Add Font',
+            'Enter a name for the font:',
+            parent=app
+        )
+
+        if raw is None:
+            return None
+
+        font_name = raw.strip()
+
+        if not font_name:
+            tk_alert.showerror('Error', 'Font name cannot be empty.')
+            continue
+
+        if any(char in font_name for char in '\\/:*?"<>|'):
+            tk_alert.showerror('Error', 'Font name contains invalid characters.')
+            continue
+
+        if any(font_name.casefold() == name.casefold() for name in fonts):
+            tk_alert.showerror('Error', f'Font "{font_name}" already exists in the project.')
+            continue
+
+        return font_name
+
+
+def remove_font(app):
+    ### Remove Font button of the InProject page
+    ### lets the user pick a registered font, then removes it from
+    ### Global.json and the project fonts folder when no button uses it
+
+    _open_font_picker(app, on_picked=lambda name: _confirm_font_removal(app, name))
+
+
+def _confirm_font_removal(app, font_name):
+    project_name = app.current_project
+
+    try:
+        used_by = [
+            fields.get('font_name')
+            for *_, fields in _collect_button_entries(project_name)
+        ]
+    except (OSError, json.JSONDecodeError):
+        used_by = []
+
+    if font_name in used_by:
+        tk_alert.showerror(
+            'Error',
+            f'Font "{font_name}" is used by a button and cannot be removed.'
+        )
+        return
+
+    if not tk_alert.askyesno(
+        'Remove Font',
+        f'Remove font "{font_name}"? This cannot be undone.'
+    ):
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    fonts = data.get('fonts') or {}
+
+    if font_name not in fonts:
+        tk_alert.showerror('Error', f'Font "{font_name}" no longer exists in Global.json.')
+        return
+
+    font_path = fonts[font_name]
+    del fonts[font_name]
+    data['fonts'] = fonts
+
+    write_global_json(project_name, data)
+
+    full_path = os.path.join('Projects', project_name, font_path)
+
+    if os.path.isfile(full_path):
+        os.remove(full_path)
+
+    tk_alert.showinfo('Removed', f'Font "{font_name}" removed from {project_name}.')
+
+
+def _open_font_picker(app, on_picked):
+    ### list the fonts of the open project and let the user pick one;
+    ### on_picked is called with the picked font name
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    names = list((data.get('fonts') or {}).keys())
+
+    if not names:
+        tk_alert.showinfo('Info', f'There are no fonts in "{project_name}" yet.')
+        return
+
+    picker = tk.Toplevel(app)
+    picker.title('Pick Font')
+    picker.transient(app)
+    picker.resizable(False, False)
+
+    try:
+        picker.grab_set()
+    except tk.TclError:
+        pass
+
+    listbox = tk.Listbox(
+        picker,
+        height=min(12, max(4, len(names))),
+        width=40,
+        selectborderwidth=2
+    )
+
+    for name in names:
+        listbox.insert(tk.END, name)
+
+    if len(names) == 1:
+        listbox.selection_set(0)
+
+    listbox.pack(padx=10, pady=(10, 4))
+
+    def pick():
+        selection = listbox.curselection()
+
+        if not selection:
+            tk_alert.showerror('Error', 'Select a font first.')
+            return
+
+        picker.destroy()
+        on_picked(names[selection[0]])
+
+    select = tk.Button(picker, text='Select', command=pick, width=10)
+    select.pack(pady=4)
+
+    cancel = tk.Button(picker, text='Cancel', command=picker.destroy, width=10)
+    cancel.pack(pady=(0, 10))
+
+
 def add_button(app):
     ### Add Button button of the InProject page
     ### opens a window to configure a new button, then stores it in the
@@ -1223,6 +1454,13 @@ def save_button_configure(app):
 
     if not font_name:
         tk_alert.showerror('Error', 'Font name cannot be empty.')
+        font_name = None
+
+    if font_name and font_name != 'base_font' and font_name not in (data.get('fonts') or {}):
+        tk_alert.showerror(
+            'Error',
+            f'Font "{font_name}" does not exist in {project_name}. Add it first with "Add Font".'
+        )
         font_name = None
 
     font_size = _read_int_field(app, '32', 'Font size')

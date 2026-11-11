@@ -1,12 +1,13 @@
 
- ### MADE BY EGameMaker GAME ENGINE
- ### OPEN-SOURCE ENGINE
- ### https://github.com/MACsepehri/EGameMaker
+### MADE BY EGameMaker GAME ENGINE
+### OPEN-SOURCE ENGINE
+### https://github.com/MACsepehri/EGameMaker
 
 import pygame,sys
 import types
 import pickle
-import mygameAssets.Global as Global
+import os
+import ttttAssets.Global as Global
 from button import Button
 
 pygame.init()
@@ -95,8 +96,8 @@ def load_action(path):
     if not path:
         return None
 
-    if path.startswith(f'Projects/mygame/'):
-        path = path[len(f'Projects/mygame/'):]
+    if path.startswith(f'Projects/tttt/'):
+        path = path[len(f'Projects/tttt/'):]
 
     try:
         with open(path, 'rb') as file:
@@ -132,6 +133,25 @@ def fire_action(action, game):
     else:
         action()
 
+def bind_button_font(button):
+    ### resolve the button's font name to a project font file and rebind
+    ### the button's font, names come from the fonts map of Global.json
+    if not button.font_name or button.font_name == 'base_font':
+        return
+
+    font_path = (getattr(Global, 'fonts', {}) or {}).get(button.font_name)
+
+    if not font_path:
+        return
+
+    full_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), font_path)
+
+    try:
+        button.font = pygame.font.Font(full_path, button.font_size)
+    except (pygame.error, OSError):
+        ### fall back to the default font Button already set up
+        pass
+
 def make_game(win):
     ### create one Button for every BUTTON entry in Global.states
     buttons = []
@@ -142,6 +162,7 @@ def make_game(win):
             action_path = entry[1] if len(entry) > 1 else None
             button = parse_button_entry(button_entry, state)
             button.action_path = action_path
+            bind_button_font(button)
             buttons.append(button)
 
     return Game(win, buttons)

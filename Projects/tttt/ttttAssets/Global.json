@@ -1,0 +1,37 @@
+{
+    "fullscreen": false,
+    "base.window.size": [
+        500,
+        500
+    ],
+    "fps": 60,
+    "title": "tttt",
+    "background": [
+        255,
+        255,
+        255
+    ],
+    "fonts": {
+        "testf": "ttttAssets/Fonts/testf.ttf"
+    },
+    "states": {
+        "main": [
+            [
+                "BUTTON(text=start,pos=[0.5,0.5],size=[150,50],font_name=testf,font_size=14,base_color=[200,200,200],hover_color=[255,255,0],text_color=[0,0,0])",
+                null
+            ],
+            [
+                "BUTTON(text=test,pos=[0.5,0.5],size=[150,50],font_name=testf,font_size=14,base_color=[200,200,200],hover_color=[255,255,0],text_color=[0,0,0])",
+                "ttttAssets/Action/1.pkl"
+            ],
+            [
+                "BUTTON(text=test2,pos=[0.5,0.5],size=[150,50],font_name=base_font,font_size=14,base_color=[200,200,200],hover_color=[255,255,0],text_color=[0,0,0])",
+                null
+            ],
+            [
+                "BUTTON(text=test3,pos=[0.4,0.5],size=[150,50],font_name=base_font,font_size=20,base_color=[200,200,200],hover_color=[255,255,0],text_color=[0,0,0])",
+                null
+            ]
+        ]
+    }
+}
