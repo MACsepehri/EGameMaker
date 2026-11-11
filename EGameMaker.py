@@ -21,6 +21,10 @@ render_gui = RenderGUIComponent()
 ### pkl path of the action function of the button currently being configured
 _button_action_path = None
 
+### (state, index, entry_string) of the Global.json button entry that is
+### currently being edited; None means a new button is being configured
+_edit_button_entry = None
+
 
 class EGameMaker(tk.Tk):
     ### main class of GUI
@@ -272,6 +276,8 @@ class OpenProjectAction:
         self.save_pickle_object('006',show_all_states)
         self.save_pickle_object('005',add_state)
         self.save_pickle_object('001',add_button)
+        self.save_pickle_object('011',edit_button)
+        self.save_pickle_object('012',remove_button)
 
 
     def __call__(self, app):
@@ -982,6 +988,8 @@ def add_button(app):
     ### opens a window to configure a new button, then stores it in the
     ### chosen state of the project Global.json
 
+    global _edit_button_entry, _button_action_path
+
     project_name = getattr(app, 'current_project', None)
 
     if not project_name:
@@ -994,7 +1002,12 @@ def add_button(app):
         tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
         return
 
+    ### configuring a new button, drop any edit that was in progress
+    _edit_button_entry = None
+    _button_action_path = None
+
     render_gui.close_component_window('AddButton')
+    render_gui.close_component_window('ButtonAction')
 
     window = render_gui.open_component_window(
         'AddButton',
@@ -1030,12 +1043,143 @@ def add_button(app):
     fill('36', '150,50')
 
 
+def edit_button(app):
+    ### Edit Button button of the InProject page
+    ### lets the user pick an existing button and pre-fills the
+    ### AddButton window with its fields; saving then replaces the entry
+
+    global _edit_button_entry
+
+    _edit_button_entry = None
+
+    _open_button_picker(app, 'Edit Button', on_picked=lambda picked: _begin_button_edit(app, picked))
+
+
+def _begin_button_edit(app, picked):
+    ### picker callback of edit_button: remember the picked entry and open
+    ### the AddButton window pre-filled with the button's fields
+
+    global _edit_button_entry, _button_action_path
+
+    state, index, entry_string, action_path, fields = picked
+
+    _edit_button_entry = (state, index, entry_string)
+    _button_action_path = action_path
+
+    project_name = app.current_project
+
+    render_gui.close_component_window('AddButton')
+    render_gui.close_component_window('ButtonAction')
+
+    window = render_gui.open_component_window(
+        'AddButton',
+        title=f'Edit Button : {project_name}',
+        geometry='420x480',
+        text_font=[
+            ('00', 20),
+            ('21', 12),
+            ('23', 12),
+            ('25', 12),
+            ('27', 12),
+            ('29', 12),
+            ('31', 12),
+            ('33', 12),
+            ('35', 12),
+            ('37', 12),
+        ],
+    )
+    window.transient(app)
+
+    def fill(entry_id, value):
+        entry = render_gui.getInput('AddButton', entry_id)
+        entry.delete(0, tk.END)
+        entry.insert(0, value)
+
+    fill('20', state)
+    fill('22', fields.get('text') or '')
+    fill('24', _strip_brackets(fields.get('hover_color') or '255,255,0'))
+    fill('26', _strip_brackets(fields.get('base_color') or '200,200,200'))
+    fill('28', _strip_brackets(fields.get('text_color') or '0,0,0'))
+    fill('30', fields.get('font_name') or 'base_font')
+    fill('32', fields.get('font_size') or '14')
+    fill('34', _strip_brackets(fields.get('pos') or '0.5,0.5'))
+    fill('36', _strip_brackets(fields.get('size') or '150,50'))
+
+
+def remove_button(app):
+    ### Remove Button button of the InProject page
+    ### lets the user pick an existing button, then removes its entry
+    ### from Global.json and its action pkl when no other button uses it
+
+    _open_button_picker(app, 'Remove Button', on_picked=lambda picked: _confirm_button_removal(app, picked))
+
+
+def _confirm_button_removal(app, picked):
+    state, index, entry_string, action_path, fields = picked
+    project_name = app.current_project
+    button_text = fields.get('text') or ''
+
+    if not tk_alert.askyesno(
+        'Remove Button',
+        f'Remove button "{button_text}" from state "{state}"?'
+    ):
+        return
+
+    try:
+        data = load_global_json(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    entries = data.get('states', {}).get(state) or []
+
+    if not (index < len(entries) and entries[index] and entries[index][0] == entry_string):
+        tk_alert.showerror(
+            'Error',
+            'That button no longer exists in Global.json. It may have been changed.'
+        )
+        return
+
+    del entries[index]
+
+    ### delete the button's action pkl when no other button entry uses it
+    if action_path:
+        shared = any(
+            isinstance(entry, (list, tuple)) and len(entry) > 1 and entry[1] == action_path
+            for state_entries in data.get('states', {}).values()
+            for entry in (state_entries or [])
+        )
+
+        if not shared:
+            pkl_path = os.path.join('Projects', project_name, action_path)
+
+            if os.path.isfile(pkl_path):
+                os.remove(pkl_path)
+
+    write_global_json(project_name, data)
+    tk_alert.showinfo('Removed', f'Button "{button_text}" removed from state "{state}".')
+
+
+def _remove_button_entry_from_data(data, entry_ref):
+    ### drop the picked entry from in-memory Global.json data so the
+    ### following append replaces it instead of duplicating it
+
+    state, index, old_entry = entry_ref
+    entries = data.get('states', {}).get(state) or []
+
+    if index < len(entries):
+        target = entries[index]
+
+        if isinstance(target, (list, tuple)) and target and target[0] == old_entry:
+            del entries[index]
+
+
 def save_button_configure(app):
     ### Save button of the AddButton window
     ### writes the configured button (and its action pkl path) into the
     ### chosen state of Global.json
 
-    global _button_action_path
+    global _button_action_path, _edit_button_entry
 
     project_name = getattr(app, 'current_project', None)
 
@@ -1107,20 +1251,53 @@ def save_button_configure(app):
         f'text_color={_format_values(text_color)}',
     ]) + ')'
 
-    ### if the action window is open with written code, save it now
-    ### so the button keeps the pkl path of its action function
-    if _button_action_path is None:
-        try:
-            if render_gui.getCodeValue('ButtonAction', '44').strip():
-                save_button_action(app)
-        except (KeyError, RuntimeError):
-            pass
+    ### if the action window is open its code box decides the button's
+    ### action: written code is pickled now, a cleared box removes the
+    ### stored action
+    try:
+        action_code = render_gui.getCodeValue('ButtonAction', '44').strip()
+    except (KeyError, RuntimeError):
+        action_code = None
 
-    data['states'][state].append([button_entry, _button_action_path])
+    if action_code is not None:
+        if action_code:
+            if action_code != _load_action_source(app, _button_action_path):
+                save_button_action(app)
+        else:
+            _button_action_path = None
+
+    was_editing = _edit_button_entry is not None
+
+    if was_editing:
+        edit_state, edit_index, old_entry = _edit_button_entry
+
+        if state == edit_state:
+            ### keep the button's place in the state's list
+            entries = data.get('states', {}).get(state) or []
+            new_entry = [button_entry, _button_action_path]
+
+            if edit_index < len(entries):
+                entries[edit_index] = new_entry
+            else:
+                entries.append(new_entry)
+        else:
+            ### the button moved to another state, drop the old entry
+            ### and append to the new state
+            _remove_button_entry_from_data(data, _edit_button_entry)
+            data['states'][state].append([button_entry, _button_action_path])
+    else:
+        data['states'][state].append([button_entry, _button_action_path])
 
     write_global_json(project_name, data)
     _button_action_path = None
-    tk_alert.showinfo('Saved', f'Button "{text}" added to state "{state}".')
+    _edit_button_entry = None
+
+    tk_alert.showinfo(
+        'Saved',
+        f'Button "{text}" updated in state "{state}".'
+        if was_editing
+        else f'Button "{text}" added to state "{state}".',
+    )
 
 
 def close_button_configure_window(app):
@@ -1148,6 +1325,13 @@ def open_button_action_window(app):
         ],
     )
     window.transient(app)
+
+    ### when editing, load the button's stored action code into the box
+    if _edit_button_entry is not None:
+        source = _load_action_source(app, _button_action_path)
+
+        if source:
+            render_gui.getCode('ButtonAction', '44').insert('1.0', source)
 
 
 def save_button_action(app):
@@ -1355,6 +1539,162 @@ def _read_pair_field(app, entry_id, label, integer=False, minimum=None):
         values.append(value)
 
     return values
+
+
+def _split_top_level(text):
+    ### split on commas that are not inside [ ] (mirror of the game's parser)
+    parts, depth, current = [], 0, ''
+
+    for char in text:
+        if char == '[':
+            depth += 1
+        elif char == ']':
+            depth -= 1
+
+        if char == ',' and depth == 0:
+            parts.append(current)
+            current = ''
+        else:
+            current += char
+
+    if current:
+        parts.append(current)
+
+    return parts
+
+
+def _parse_button_fields(entry_string):
+    ### extract the key/value pairs of a BUTTON(...) entry string
+    if not isinstance(entry_string, str) or not entry_string.startswith('BUTTON('):
+        return {}
+
+    body = entry_string[len('BUTTON('):-1]
+    fields = {}
+
+    for part in _split_top_level(body):
+        key, _, value = part.partition('=')
+        fields[key.strip()] = value.strip()
+
+    return fields
+
+
+def _collect_button_entries(project_name):
+    ### every button entry of the project as
+    ### (state, index, entry_string, action_path, fields) tuples
+    data = load_global_json(project_name)
+    buttons = []
+
+    for state, entries in (data.get('states') or {}).items():
+        for index, entry in enumerate(entries or []):
+            if not isinstance(entry, (list, tuple)) or not entry:
+                continue
+
+            entry_string = entry[0]
+
+            buttons.append((
+                state,
+                index,
+                entry_string,
+                entry[1] if len(entry) > 1 else None,
+                _parse_button_fields(entry_string),
+            ))
+
+    return buttons
+
+
+def _open_button_picker(app, title, on_picked):
+    ### list every button of the open project and let the user pick one;
+    ### on_picked is called with the picked (state, index, entry, action, fields) tuple
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        tk_alert.showerror('Error', 'No project is open.')
+        return
+
+    try:
+        buttons = _collect_button_entries(project_name)
+    except (OSError, json.JSONDecodeError) as error:
+        tk_alert.showerror('Error', f'Could not load Global.json:\n{error}')
+        return
+
+    if not buttons:
+        tk_alert.showinfo('Info', f'There are no buttons in "{project_name}" yet.')
+        return
+
+    picker = tk.Toplevel(app)
+    picker.title(title)
+    picker.transient(app)
+    picker.resizable(False, False)
+
+    try:
+        picker.grab_set()
+    except tk.TclError:
+        pass
+
+    listbox = tk.Listbox(
+        picker,
+        height=min(12, max(4, len(buttons))),
+        width=48,
+        selectborderwidth=2
+    )
+
+    for state, index, _, _, fields in buttons:
+        listbox.insert(tk.END, f'{state} : {fields.get("text", "")}')
+
+    if len(buttons) == 1:
+        listbox.selection_set(0)
+
+    listbox.pack(padx=10, pady=(10, 4))
+
+    def pick():
+        selection = listbox.curselection()
+
+        if not selection:
+            tk_alert.showerror('Error', 'Select a button first.')
+            return
+
+        picker.destroy()
+        on_picked(buttons[selection[0]])
+
+    select = tk.Button(picker, text='Select', command=pick, width=10)
+    select.pack(pady=4)
+
+    cancel = tk.Button(picker, text='Cancel', command=picker.destroy, width=10)
+    cancel.pack(pady=(0, 10))
+
+
+def _strip_brackets(raw):
+    raw = (raw or '').strip()
+
+    if raw.startswith('[') and raw.endswith(']'):
+        raw = raw[1:-1].strip()
+
+    return raw
+
+
+def _load_action_source(app, action_path):
+    ### read the pickled action source text of a stored button action so
+    ### it can be shown in the ButtonAction window
+    if not action_path:
+        return None
+
+    project_name = getattr(app, 'current_project', None)
+
+    if not project_name:
+        return None
+
+    full_path = os.path.join('Projects', project_name, action_path)
+
+    if not os.path.isfile(full_path):
+        return None
+
+    try:
+        with open(full_path, 'rb') as file:
+            loaded = pickle.load(file)
+    except (OSError, EOFError, pickle.UnpicklingError):
+        return None
+
+    return loaded if isinstance(loaded, str) else None
 
 
 def run_project(name):

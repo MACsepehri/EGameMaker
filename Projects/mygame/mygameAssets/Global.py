@@ -5,16 +5,16 @@
 
 import json
 
-def get_json(index, path="testAssets/Global.json"):
+def get_json(index, path="mygameAssets/Global.json"):
     data = json.load(open(path,"r"))
     return data[index]
 
 def set_state(value):
     global states
-    with open("testAssets/Global.json","r") as r_file:
+    with open("mygameAssets/Global.json","r") as r_file:
         data = json,load(r_file)
         data["states"] = value
-    with open("testAssets/Global.json","w") as w_file:
+    with open("mygameAssets/Global.json","w") as w_file:
         json.dump(data,w_file)
     states = value
 

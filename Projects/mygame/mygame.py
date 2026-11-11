@@ -6,7 +6,7 @@
 import pygame,sys
 import types
 import pickle
-import wdadawdAssets.Global as Global
+import mygameAssets.Global as Global
 from button import Button
 
 pygame.init()
@@ -95,8 +95,8 @@ def load_action(path):
     if not path:
         return None
 
-    if path.startswith(f'Projects/wdadawd/'):
-        path = path[len(f'Projects/wdadawd/'):]
+    if path.startswith(f'Projects/mygame/'):
+        path = path[len(f'Projects/mygame/'):]
 
     try:
         with open(path, 'rb') as file:
